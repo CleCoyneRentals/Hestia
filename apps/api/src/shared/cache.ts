@@ -19,7 +19,7 @@ export async function cached<T>(
   }
 
   const freshValue = await fetchFn();
-  await redis.set(key, JSON.stringify(freshValue), { ex: ttlSeconds });
+  await redis.set(key, freshValue, { ex: ttlSeconds });
 
   return freshValue;
 }
