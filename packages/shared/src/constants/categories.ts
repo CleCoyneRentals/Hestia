@@ -11,4 +11,7 @@ export const ITEM_CATEGORIES = [
   { value: 'other', label: 'Other', icon: 'box' },
 ] as const;
 
-export const CATEGORY_VALUES = ITEM_CATEGORIES.map((c) => c.value);
+export const CATEGORY_VALUES = ITEM_CATEGORIES.map((c) => c.value) as unknown as readonly [
+  (typeof ITEM_CATEGORIES)[number]['value'],
+  ...(typeof ITEM_CATEGORIES)[number]['value'][],
+];
