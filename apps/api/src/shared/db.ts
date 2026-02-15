@@ -7,6 +7,5 @@ export const prisma = new PrismaClient({
     : ['warn', 'error'],
 });
 
-process.on('beforeExit', async () => {
-  await prisma.$disconnect();
-});
+// Note: Prisma disconnect is handled by the graceful shutdown in server.ts (SIGTERM/SIGINT).
+// Do NOT use process.on('beforeExit') — it doesn't fire on signals.

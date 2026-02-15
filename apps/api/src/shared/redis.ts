@@ -36,19 +36,29 @@ export const uploadRateLimit = new Ratelimit({
   prefix: 'rl:upload',
 });
 
-// ---------- IORedis Client ----------
+// ---------- IORedis Client (lazy) ----------
 // Persistent TCP connection. Required by Socket.io adapter (Phase 9) and BullMQ (Phase 5).
+// Lazy-initialized to avoid opening an unused TCP connection until actually needed.
 
-export const ioRedisClient = new IORedis(env.REDIS_URL, {
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-  tls: env.REDIS_URL.startsWith('rediss://') ? {} : undefined,
-});
+let _ioRedisClient: IORedis | null = null;
 
-ioRedisClient.on('connect', () => {
-  console.log('IORedis connected to Upstash');
-});
+export function getIORedisClient(): IORedis {
+  if (!_ioRedisClient) {
+    _ioRedisClient = new IORedis(env.REDIS_URL, {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      tls: env.REDIS_URL.startsWith('rediss://') ? {} : undefined,
+    });
 
-ioRedisClient.on('error', (err) => {
-  console.error('IORedis connection error:', err.message);
-});
+    // Note: These use console because the Fastify logger isn't available in this module.
+    // When consumed in Phase 5/9, pass the Fastify logger from the calling context instead.
+    _ioRedisClient.on('connect', () => {
+      console.log('IORedis connected to Upstash');
+    });
+
+    _ioRedisClient.on('error', (err) => {
+      console.error('IORedis connection error:', err.message);
+    });
+  }
+  return _ioRedisClient;
+}

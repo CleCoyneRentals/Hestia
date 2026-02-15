@@ -61,7 +61,11 @@ export const createTaskSchema = z.object({
   notifyDayOf: z.boolean().default(true),
 });
 
-export const updateTaskSchema = createTaskSchema.partial();
+export const updateTaskSchema = createTaskSchema.omit({
+  homeId: true,
+  itemId: true,
+  assignedTo: true,
+}).partial();
 
 // ---------- Type exports ----------
 

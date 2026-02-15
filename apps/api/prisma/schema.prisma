@@ -25,7 +25,8 @@ model User {
   subscription Subscription?
   homes        Home[]
 
-  @@index([email], map: "idx_users_email")
+  // Note: @unique on email already creates an index; no separate @@index needed.
+  // TODO(Phase 1): Evaluate cuid() or uuidv7 for primary keys for better index locality
   @@map("users")
 }
 

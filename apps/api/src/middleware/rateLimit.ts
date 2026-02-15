@@ -11,7 +11,7 @@ export async function rateLimitMiddleware(
 ) {
   // req.user is populated by auth middleware in Phase 1.
   // Until then, falls back to IP address.
-  const identifier = (req as any).user?.id || req.ip;
+  const identifier = req.user?.id || req.ip;
 
   const { success, limit, remaining, reset } = await standardRateLimit.limit(
     identifier,
@@ -22,7 +22,7 @@ export async function rateLimitMiddleware(
   reply.header('X-RateLimit-Reset', reset);
 
   if (!success) {
-    reply.status(429).send({
+    return reply.status(429).send({
       code: 'RATE_LIMITED',
       message: 'Too many requests. Please slow down.',
       retryAfter: Math.ceil((reset - Date.now()) / 1000),

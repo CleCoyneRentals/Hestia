@@ -6,11 +6,16 @@ initSentry();
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import { env } from './config.js';
+import { prisma } from './shared/db.js';
+import './types.js'; // Fastify request type augmentation
 
 // ---------- Create the Fastify instance ----------
 
+// TODO: Verify moduleResolution:"nodenext" works for production builds (tsc + node dist/server.js)
 const app = Fastify({
+  trustProxy: true, // Required for correct req.ip behind reverse proxies / load balancers
   logger: {
     transport: env.NODE_ENV === 'development'
       ? { target: 'pino-pretty', options: { colorize: true } }
@@ -26,6 +31,16 @@ await app.register(helmet);
 await app.register(cors, {
   origin: env.CORS_ORIGINS.split(','),
   credentials: true,
+});
+
+await app.register(rateLimit, {
+  max: 100,
+  timeWindow: '1 minute',
+  // per user (identified by JWT) or per IP if not authenticated
+  keyGenerator: (req) => {
+    // req.user is populated by the auth middleware. If it's missing (e.g. public routes), fall back to IP.
+    return req.user?.id || req.ip;
+  },
 });
 
 // ---------- Health check ----------
@@ -48,7 +63,7 @@ app.setErrorHandler((error, req, reply) => {
       extra: {
         method: req.method,
         url: req.url,
-        userId: (req as any).user?.id,
+        userId: req.user?.id,
       },
     });
   }
@@ -65,6 +80,20 @@ app.setErrorHandler((error, req, reply) => {
 
   reply.status(statusCode).send(response);
 });
+
+// ---------- Start the server ----------
+
+// ---------- Graceful shutdown ----------
+
+const shutdown = async (signal: string) => {
+  app.log.info(`Received ${signal}, shutting down gracefully...`);
+  await app.close();
+  await prisma.$disconnect();
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // ---------- Start the server ----------
 

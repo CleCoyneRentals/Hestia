@@ -16,9 +16,9 @@ export const TIER_LIMITS = {
     maxFileMb: 25,
   },
   premium: {
-    maxHomes: Infinity,
-    maxItems: Infinity,
-    maxTasks: Infinity,
+    maxHomes: -1, // -1 means unlimited
+    maxItems: -1,
+    maxTasks: -1,
     canShare: true,
     canAttach: true,
     maxFileMb: 100,

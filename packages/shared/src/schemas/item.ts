@@ -37,7 +37,7 @@ export const createItemSchema = z.object({
   metadata: z.record(z.unknown()).optional(),
 });
 
-export const updateItemSchema = createItemSchema.partial();
+export const updateItemSchema = createItemSchema.omit({ roomId: true }).partial();
 
 // ---------- Query schema ----------
 

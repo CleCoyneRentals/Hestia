@@ -14,6 +14,7 @@ export async function cached<T>(
   fetchFn: () => Promise<T>,
 ): Promise<T> {
   const cachedValue = await redis.get(key);
+  // TODO(Phase 2): Add Zod schema parameter for type-safe deserialization instead of `as T`
   if (cachedValue !== null) {
     return cachedValue as T;
   }

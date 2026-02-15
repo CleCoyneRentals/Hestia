@@ -6,8 +6,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "vitest",
-    "lint": "eslint src/"
+    "test": "vitest"
   },
   "dependencies": {
     "@homeapp/shared": "*",
