@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+// ---------- Enums ----------
+
+export const itemConditionEnum = z.enum([
+  'excellent',
+  'good',
+  'fair',
+  'poor',
+]);
+
 // ---------- Base schema: an item as returned from the API ----------
 
 export const itemSchema = z.object({
@@ -14,7 +23,7 @@ export const itemSchema = z.object({
   purchaseDate: z.coerce.date().nullable(),
   purchasePrice: z.number().min(0).max(9999999.99).nullable(),
   warrantyUntil: z.coerce.date().nullable(),
-  condition: z.enum(['excellent', 'good', 'fair', 'poor']).nullable(),
+  condition: itemConditionEnum.nullable(),
   metadata: z.record(z.unknown()).default({}),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -33,7 +42,7 @@ export const createItemSchema = z.object({
   purchaseDate: z.coerce.date().optional(),
   purchasePrice: z.number().min(0).max(9999999.99).optional(),
   warrantyUntil: z.coerce.date().optional(),
-  condition: z.enum(['excellent', 'good', 'fair', 'poor']).optional(),
+  condition: itemConditionEnum.optional(),
   metadata: z.record(z.unknown()).optional(),
 });
 
@@ -57,3 +66,4 @@ export type Item = z.infer<typeof itemSchema>;
 export type CreateItemInput = z.infer<typeof createItemSchema>;
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;
 export type ItemQuery = z.infer<typeof itemQuerySchema>;
+export type ItemCondition = z.infer<typeof itemConditionEnum>;

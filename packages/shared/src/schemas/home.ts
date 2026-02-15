@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+// ---------- Enums ----------
+
+export const homeTypeEnum = z.enum([
+  'single_family',
+  'duplex',
+  'condo',
+  'townhouse',
+  'apartment',
+  'other',
+]);
+
 // ---------- Base schema: a home as returned from the API ----------
 
 export const homeSchema = z.object({
@@ -7,7 +18,7 @@ export const homeSchema = z.object({
   ownerId: z.string().uuid(),
   name: z.string().min(1).max(200),
   address: z.string().max(500).nullable(),
-  homeType: z.enum(['single_family', 'duplex', 'condo', 'townhouse', 'apartment', 'other']).nullable(),
+  homeType: homeTypeEnum.nullable(),
   yearBuilt: z.number().int().min(1600).max(2100).nullable(),
   squareFeet: z.number().int().min(0).nullable(),
   photoUrl: z.string().url().nullable(),
@@ -20,7 +31,7 @@ export const homeSchema = z.object({
 export const createHomeSchema = z.object({
   name: z.string().min(1, 'Home name is required').max(200),
   address: z.string().max(500).optional(),
-  homeType: z.enum(['single_family', 'duplex', 'condo', 'townhouse', 'apartment', 'other']).optional(),
+  homeType: homeTypeEnum.optional(),
   yearBuilt: z.number().int().min(1600).max(2100).optional(),
   squareFeet: z.number().int().min(0).optional(),
 });
@@ -32,3 +43,4 @@ export const updateHomeSchema = createHomeSchema.partial();
 export type Home = z.infer<typeof homeSchema>;
 export type CreateHomeInput = z.infer<typeof createHomeSchema>;
 export type UpdateHomeInput = z.infer<typeof updateHomeSchema>;
+export type HomeType = z.infer<typeof homeTypeEnum>;
