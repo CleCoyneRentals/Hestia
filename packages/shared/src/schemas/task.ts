@@ -64,7 +64,6 @@ export const createTaskSchema = z.object({
 export const updateTaskSchema = createTaskSchema.omit({
   homeId: true,
   itemId: true,
-  assignedTo: true,
 }).partial();
 
 // ---------- Type exports ----------

@@ -13,14 +13,21 @@ export async function cached<T>(
   ttlSeconds: number,
   fetchFn: () => Promise<T>,
 ): Promise<T> {
-  const cachedValue = await redis.get(key);
-  // TODO(Phase 2): Add Zod schema parameter for type-safe deserialization instead of `as T`
-  if (cachedValue !== null) {
-    return cachedValue as T;
+  // Cache reads are best-effort: if Redis is down, fall through to the database.
+  try {
+    const cachedValue = await redis.get(key);
+    // TODO(Phase 2): Add Zod schema parameter for type-safe deserialization instead of `as T`
+    if (cachedValue !== null) {
+      return cachedValue as T;
+    }
+  } catch {
+    // Redis unavailable — continue to fetchFn
   }
 
   const freshValue = await fetchFn();
-  await redis.set(key, freshValue, { ex: ttlSeconds });
+
+  // Cache writes are fire-and-forget: don't let a Redis failure block the response.
+  redis.set(key, freshValue, { ex: ttlSeconds }).catch(() => {});
 
   return freshValue;
 }
@@ -29,5 +36,9 @@ export async function cached<T>(
  * Invalidates a cached key. Call this when data changes.
  */
 export async function invalidateCache(key: string): Promise<void> {
-  await redis.del(key);
+  try {
+    await redis.del(key);
+  } catch {
+    // Best-effort: stale data will expire via TTL
+  }
 }

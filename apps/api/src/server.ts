@@ -6,7 +6,7 @@ initSentry();
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
-import rateLimit from '@fastify/rate-limit';
+
 import { env } from './config.js';
 import { prisma } from './shared/db.js';
 import './types.js'; // Fastify request type augmentation
@@ -29,19 +29,12 @@ const app = Fastify({
 await app.register(helmet);
 
 await app.register(cors, {
-  origin: env.CORS_ORIGINS.split(','),
+  origin: env.CORS_ORIGINS,
   credentials: true,
 });
 
-await app.register(rateLimit, {
-  max: 100,
-  timeWindow: '1 minute',
-  // per user (identified by JWT) or per IP if not authenticated
-  keyGenerator: (req) => {
-    // req.user is populated by the auth middleware. If it's missing (e.g. public routes), fall back to IP.
-    return req.user?.id || req.ip;
-  },
-});
+// Note: Rate limiting is handled per-route via Upstash middleware (src/middleware/rateLimit.ts)
+// which supports three tiers (standard/auth/upload) and works across multiple server instances.
 
 // ---------- Health check ----------
 
@@ -81,14 +74,16 @@ app.setErrorHandler((error, req, reply) => {
   reply.status(statusCode).send(response);
 });
 
-// ---------- Start the server ----------
-
 // ---------- Graceful shutdown ----------
 
 const shutdown = async (signal: string) => {
   app.log.info(`Received ${signal}, shutting down gracefully...`);
-  await app.close();
-  await prisma.$disconnect();
+  try {
+    await app.close();
+    await prisma.$disconnect();
+  } catch (err) {
+    app.log.error(err, 'Error during shutdown');
+  }
   process.exit(0);
 };
 

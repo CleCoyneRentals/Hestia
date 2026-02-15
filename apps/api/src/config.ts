@@ -41,7 +41,8 @@ const envSchema = z.object({
   // Application — Required Phase 0
   // TODO(Phase 1): Re-evaluate JWT_SECRET when Clerk auth is integrated
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
-  CORS_ORIGINS: z.string().default('http://localhost:3000'),
+  CORS_ORIGINS: z.string().default('http://localhost:3000')
+    .transform(s => s.split(',').map(o => o.trim()).filter(Boolean)),
   API_URL: z.string().url().default('http://localhost:3001'),
 });
 

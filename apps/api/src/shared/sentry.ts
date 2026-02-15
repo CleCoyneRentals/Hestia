@@ -1,9 +1,9 @@
 import * as Sentry from '@sentry/node';
 import { env } from '../config.js';
 
-export function initSentry() {
+export function initSentry(logger?: { warn: (msg: string) => void }) {
   if (!env.SENTRY_DSN) {
-    console.warn('SENTRY_DSN not set — error tracking disabled');
+    (logger ?? console).warn('SENTRY_DSN not set — error tracking disabled');
     return;
   }
 
