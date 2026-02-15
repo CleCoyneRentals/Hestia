@@ -1,3 +1,9 @@
+# OS files
+.DS_Store
+
+# Turborepo
+.turbo
+
 # Logs
 logs
 *.log
@@ -137,3 +143,5 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+
