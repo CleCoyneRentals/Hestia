@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_DIRECT")
+}
+
+// ---------- Users & Authentication ----------
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  displayName   String    @map("display_name")
+  avatarUrl     String?   @map("avatar_url")
+  emailVerified Boolean   @default(false) @map("email_verified")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastLoginAt   DateTime? @map("last_login_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  subscription Subscription?
+  homes        Home[]
+
+  @@index([email], map: "idx_users_email")
+  @@map("users")
+}
+
+// ---------- Subscriptions & Billing ----------
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  userId               String             @unique @map("user_id")
+  tier                 SubscriptionTier   @default(free)
+  status               SubscriptionStatus @default(active)
+  stripeCustomerId     String?            @map("stripe_customer_id")
+  stripeSubscriptionId String?            @map("stripe_subscription_id")
+  currentPeriodStart   DateTime?          @map("current_period_start")
+  currentPeriodEnd     DateTime?          @map("current_period_end")
+  cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+// ---------- Homes ----------
+
+model Home {
+  id         String   @id @default(uuid())
+  ownerId    String   @map("owner_id")
+  name       String
+  address    String?
+  homeType   String?  @map("home_type")
+  yearBuilt  Int?     @map("year_built")
+  squareFeet Int?     @map("square_feet")
+  photoUrl   String?  @map("photo_url")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId], map: "idx_homes_owner")
+  @@map("homes")
+}
+
+// ---------- Enums ----------
+
+enum SubscriptionTier {
+  free
+  basic
+  premium
+
+  @@map("subscription_tier")
+}
+
+enum SubscriptionStatus {
+  active
+  past_due
+  canceled
+  trialing
+
+  @@map("subscription_status")
+}
