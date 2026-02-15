@@ -3,7 +3,7 @@ import { initSentry, Sentry } from './shared/sentry.js';
 // Initialize Sentry before anything else so it captures all errors
 initSentry();
 
-import Fastify from 'fastify';
+import Fastify, { type FastifyError } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 
@@ -13,7 +13,6 @@ import './types.js'; // Fastify request type augmentation
 
 // ---------- Create the Fastify instance ----------
 
-// TODO: Verify moduleResolution:"nodenext" works for production builds (tsc + node dist/server.js)
 const app = Fastify({
   trustProxy: true, // Required for correct req.ip behind reverse proxies / load balancers
   logger: {
@@ -47,7 +46,7 @@ app.get('/health', async (_req, reply) => {
 
 // ---------- Global error handler ----------
 
-app.setErrorHandler((error, req, reply) => {
+app.setErrorHandler((error: FastifyError, req, reply) => {
   req.log.error(error);
 
   // Report 5xx errors to Sentry

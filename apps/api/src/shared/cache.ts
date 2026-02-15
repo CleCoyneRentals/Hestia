@@ -1,4 +1,5 @@
 import { redis } from './redis.js';
+import { z } from 'zod';
 
 /**
  * Generic cache-aside helper.
@@ -12,13 +13,13 @@ export async function cached<T>(
   key: string,
   ttlSeconds: number,
   fetchFn: () => Promise<T>,
+  schema?: z.ZodType<T>,
 ): Promise<T> {
   // Cache reads are best-effort: if Redis is down, fall through to the database.
   try {
     const cachedValue = await redis.get(key);
-    // TODO(Phase 2): Add Zod schema parameter for type-safe deserialization instead of `as T`
     if (cachedValue !== null) {
-      return cachedValue as T;
+      return schema ? schema.parse(cachedValue) : (cachedValue as T);
     }
   } catch {
     // Redis unavailable — continue to fetchFn

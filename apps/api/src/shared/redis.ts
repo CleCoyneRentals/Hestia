@@ -1,6 +1,6 @@
 import { Redis } from '@upstash/redis';
 import { Ratelimit } from '@upstash/ratelimit';
-import IORedis from 'ioredis';
+import { Redis as IORedis } from 'ioredis';
 import { env } from '../config.js';
 
 // ---------- Upstash REST Client ----------
@@ -56,7 +56,7 @@ export function getIORedisClient(): IORedis {
       console.log('IORedis connected to Upstash');
     });
 
-    _ioRedisClient.on('error', (err) => {
+    _ioRedisClient.on('error', (err: Error) => {
       console.error('IORedis connection error:', err.message);
     });
   }

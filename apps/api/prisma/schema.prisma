@@ -57,7 +57,7 @@ model Home {
   ownerId    String   @map("owner_id")
   name       String
   address    String?
-  homeType   String?  @map("home_type")
+  homeType   HomeType?  @map("home_type")
   yearBuilt  Int?     @map("year_built")
   squareFeet Int?     @map("square_feet")
   photoUrl   String?  @map("photo_url")
@@ -87,4 +87,44 @@ enum SubscriptionStatus {
   trialing
 
   @@map("subscription_status")
+}
+
+enum HomeType {
+  single_family
+  duplex
+  condo
+  townhouse
+  apartment
+  other
+
+  @@map("home_type_enum")
+}
+
+enum RoomType {
+  kitchen
+  bedroom
+  bathroom
+  living_room
+  dining_room
+  office
+  garage
+  basement
+  attic
+  laundry
+  closet
+  hallway
+  patio
+  balcony
+  other
+
+  @@map("room_type_enum")
+}
+
+enum ItemCondition {
+  excellent
+  good
+  fair
+  poor
+
+  @@map("item_condition_enum")
 }
