@@ -39,19 +39,25 @@ For detailed information about the project's architecture, implementation plan, 
 The repository is organized as a monorepo containing the backend API and the web application.
 
 ```
-home-app/
+Hestia/
+├── .github/                        # GitHub Actions and configurations
+├── .husky/                         # Git hooks
 ├── apps/
 │   ├── api/                        # Fastify API server
 │   └── web/                        # Next.js web application
-├── packages/
-│   └── shared/                     # Shared TypeScript code (schemas, types, constants)
 ├── docs/                           # Project documentation
 │   ├── implementation-plan.md
 │   ├── phase0-backend-guide.md
 │   └── saas-architecture-v2.md
+├── packages/
+│   └── shared/                     # Shared TypeScript code (schemas, types, constants)
+├── .gitignore
 ├── docker-compose.yml              # Local development setup (Postgres + Redis)
-├── turbo.json                      # Turborepo configuration
-└── package.json                    # Root package configuration
+├── eslint.config.mjs
+├── package-lock.json
+├── package.json                    # Root package configuration
+├── tsconfig.json
+└── turbo.json                      # Turborepo configuration
 ```
 
 ## Getting Started
@@ -61,15 +67,15 @@ To get started with development, please refer to the [Backend Implementation Gui
 ### Prerequisites
 
 *   Node.js (LTS version recommended)
-*   npm or pnpm
+*   npm
 *   Docker (optional, for local database/redis)
 
 ### Quick Start
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository-url>
-    cd home-app
+    git clone https://github.com/your-username/Hestia.git
+    cd Hestia
     ```
 
 2.  **Install dependencies:**
@@ -78,7 +84,7 @@ To get started with development, please refer to the [Backend Implementation Gui
     ```
 
 3.  **Set up environment variables:**
-    Copy `.env.example` to `.env` and fill in the required values. See [Backend Guide](docs/phase0-backend-guide.md#3-environment-file-template) for details.
+    Copy `apps/api/.env.example` to `apps/api/.env` and fill in the required values. See [Backend Guide](docs/phase0-backend-guide.md#environment-file-template) for details.
 
 4.  **Run development server:**
     ```bash
