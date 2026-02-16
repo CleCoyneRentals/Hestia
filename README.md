@@ -12,7 +12,7 @@ For detailed information about the project's architecture, implementation plan, 
 
 ## Tech Stack Overview
 
-### Backend & Web Monorepo (`home-app`)
+### Backend & Web Monorepo (`Hestia`)
 *   **Monorepo Tool:** Turborepo
 *   **API Server:** Node.js with Fastify
 *   **Web App:** Next.js (React)
@@ -25,6 +25,8 @@ For detailed information about the project's architecture, implementation plan, 
 ### Mobile Apps
 *   **iOS:** Swift + SwiftUI (`home-app-ios`)
 *   **Android:** Kotlin + Jetpack Compose (`home-app-android`)
+
+> Note: The mobile app repositories (`home-app-ios` and `home-app-android`) are planned and do not exist yet.
 
 ### Infrastructure & Services
 *   **Authentication:** Clerk / Auth0
@@ -74,7 +76,7 @@ To get started with development, please refer to the [Backend Implementation Gui
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/Hestia.git
+    git clone https://github.com/CleCoyneRentals/Hestia.git
     cd Hestia
     ```
 
@@ -84,7 +86,7 @@ To get started with development, please refer to the [Backend Implementation Gui
     ```
 
 3.  **Set up environment variables:**
-    Copy `apps/api/.env.example` to `apps/api/.env` and fill in the required values. See [Backend Guide](docs/phase0-backend-guide.md#environment-file-template) for details.
+    Copy `apps/api/.env.example` to `apps/api/.env` and fill in the required values. See [Implementation Plan](docs/implementation-plan.md#environment-file-template) for details.
 
 4.  **Run development server:**
     ```bash
