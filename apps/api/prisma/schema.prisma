@@ -12,6 +12,7 @@ datasource db {
 
 model User {
   id            String    @id @default(uuid())
+  authId        String    @unique @map("auth_id")    // Neon Auth user ID (JWT sub claim)
   email         String    @unique
   displayName   String    @map("display_name")
   avatarUrl     String?   @map("avatar_url")
@@ -26,7 +27,6 @@ model User {
   homes        Home[]
 
   // Note: @unique on email already creates an index; no separate @@index needed.
-  // TODO(Phase 1): Evaluate cuid() or uuidv7 for primary keys for better index locality
   @@map("users")
 }
 

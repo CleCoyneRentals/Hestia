@@ -10,9 +10,9 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "@homeapp/shared": "*",
     "@fastify/cors": "^10.0.0",
     "@fastify/helmet": "^12.0.0",
+    "@homeapp/shared": "*",
     "@prisma/client": "^6.0.0",
     "@sentry/node": "^8.0.0",
     "@upstash/ratelimit": "^2.0.0",
@@ -20,6 +20,7 @@
     "dotenv": "^16.4.0",
     "fastify": "^5.0.0",
     "ioredis": "^5.4.0",
+    "jose": "^6.1.2",
     "pino-pretty": "^11.0.0",
     "zod": "^3.23.0",
     "zod-to-json-schema": "^3.23.0"

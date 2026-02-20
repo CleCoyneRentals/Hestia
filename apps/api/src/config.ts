@@ -17,9 +17,8 @@ const envSchema = z.object({
   UPSTASH_REDIS_REST_URL: z.string().min(1, 'UPSTASH_REDIS_REST_URL is required'),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1, 'UPSTASH_REDIS_REST_TOKEN is required'),
 
-  // Auth (Clerk) — Required Phase 1
-  CLERK_SECRET_KEY: z.string().optional(),
-  CLERK_PUBLISHABLE_KEY: z.string().optional(),
+  // Auth (Neon Auth) — Required Phase 1
+  NEON_AUTH_URL: z.string().url('NEON_AUTH_URL must be a valid URL'),
 
   // Payments (Stripe) — Required Phase 6
   STRIPE_SECRET_KEY: z.string().optional(),
@@ -39,8 +38,6 @@ const envSchema = z.object({
   SENTRY_DSN: z.string().optional(),
 
   // Application — Required Phase 0
-  // TODO(Phase 1): Re-evaluate JWT_SECRET when Clerk auth is integrated
-  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   CORS_ORIGINS: z.string().default('http://localhost:3000')
     .transform(s => s.split(',').map(o => o.trim()).filter(Boolean)),
   API_URL: z.string().url().default('http://localhost:3001'),
