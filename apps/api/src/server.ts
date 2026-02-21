@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { initSentry, Sentry } from './shared/sentry.js';
 
 // Initialize Sentry before anything else so it captures all errors
@@ -6,8 +7,12 @@ initSentry();
 import Fastify, { type FastifyError } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import { clerkPlugin } from '@clerk/fastify';
 
 import { env } from './config.js';
+import { requireAuth } from './middleware/auth.js';
+import { authRoutes } from './routes/api/auth.js';
+import { clerkWebhookRoutes } from './routes/webhooks/clerk.js';
 import { prisma } from './shared/db.js';
 import './types.js'; // Fastify request type augmentation
 
@@ -32,6 +37,14 @@ await app.register(cors, {
   credentials: true,
 });
 
+console.log('--- CLERK ENV VARS ---');
+console.log('CLERK_PUBLISHABLE_KEY:', process.env.CLERK_PUBLISHABLE_KEY ? '(set, length: ' + process.env.CLERK_PUBLISHABLE_KEY.length + ')' : '(not set)');
+console.log('CLERK_SECRET_KEY:', process.env.CLERK_SECRET_KEY ? '(set)' : '(not set)');
+console.log('--- raw value of CLERK_PUBLISHABLE_KEY ---');
+console.log(process.env.CLERK_PUBLISHABLE_KEY);
+
+await app.register(clerkPlugin);
+
 // Note: Rate limiting is handled per-route via Upstash middleware (src/middleware/rateLimit.ts)
 // which supports three tiers (standard/auth/upload) and works across multiple server instances.
 
@@ -43,6 +56,15 @@ app.get('/health', async (_req, reply) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+await app.register(clerkWebhookRoutes, {
+  prefix: '/webhooks',
+});
+
+await app.register(async apiApp => {
+  apiApp.addHook('preHandler', requireAuth);
+  await apiApp.register(authRoutes);
+}, { prefix: '/api' });
 
 // ---------- Global error handler ----------
 

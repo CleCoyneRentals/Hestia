@@ -145,3 +145,6 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 
+/.vscode
+/.agents
+/.claude/skills

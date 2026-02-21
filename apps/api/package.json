@@ -10,9 +10,10 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "@homeapp/shared": "*",
+    "@clerk/fastify": "^2.6.25",
     "@fastify/cors": "^10.0.0",
     "@fastify/helmet": "^12.0.0",
+    "@homeapp/shared": "*",
     "@prisma/client": "^6.0.0",
     "@sentry/node": "^8.0.0",
     "@upstash/ratelimit": "^2.0.0",

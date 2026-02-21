@@ -18,7 +18,8 @@ const envSchema = z.object({
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1, 'UPSTASH_REDIS_REST_TOKEN is required'),
 
   // Auth (Clerk) — Required Phase 1
-  CLERK_SECRET_KEY: z.string().optional(),
+  CLERK_SECRET_KEY: z.string().min(1, 'CLERK_SECRET_KEY is required'),
+  CLERK_WEBHOOK_SIGNING_SECRET: z.string().min(1, 'CLERK_WEBHOOK_SIGNING_SECRET is required'),
   CLERK_PUBLISHABLE_KEY: z.string().optional(),
 
   // Payments (Stripe) — Required Phase 6
@@ -39,8 +40,8 @@ const envSchema = z.object({
   SENTRY_DSN: z.string().optional(),
 
   // Application — Required Phase 0
-  // TODO(Phase 1): Re-evaluate JWT_SECRET when Clerk auth is integrated
-  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+  // Deprecated after Clerk integration. Keep optional only for backwards compatibility.
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters').optional(),
   CORS_ORIGINS: z.string().default('http://localhost:3000')
     .transform(s => s.split(',').map(o => o.trim()).filter(Boolean)),
   API_URL: z.string().url().default('http://localhost:3001'),
