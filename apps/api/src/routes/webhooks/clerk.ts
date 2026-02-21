@@ -3,6 +3,7 @@ import { verifyWebhook } from '@clerk/fastify/webhooks';
 import type { WebhookEvent } from '@clerk/fastify/webhooks';
 import { upsertUserFromClerkPayload, AuthSyncError } from '../../modules/auth/userSync.js';
 import type { ClerkWebhookEvent } from '../../modules/auth/types.js';
+import { webhookRateLimitMiddleware } from '../../middleware/rateLimit.js';
 import { redis } from '../../shared/redis.js';
 
 const SUPPORTED_USER_EVENTS: ReadonlySet<ClerkWebhookEvent['type']> = new Set([
@@ -31,6 +32,15 @@ function parseSvixId(value: string | string[] | undefined): string | null {
   return null;
 }
 
+function parseSvixTimestamp(value: string | string[] | undefined): Date | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return undefined;
+  }
+  const ms = Number(raw) * 1000;
+  return Number.isFinite(ms) ? new Date(ms) : undefined;
+}
+
 function idempotencyKeyForEvent(event: ClerkWebhookEvent, svixId: string | null): string {
   if (svixId) {
     return `clerk-webhook:svix:${svixId}`;
@@ -43,7 +53,9 @@ function idempotencyKeyForEvent(event: ClerkWebhookEvent, svixId: string | null)
 }
 
 export const clerkWebhookRoutes: FastifyPluginAsync = async app => {
-  app.post('/clerk', async (req, reply) => {
+  app.post('/clerk', {
+    preHandler: webhookRateLimitMiddleware,
+  }, async (req, reply) => {
     let event: WebhookEvent;
     try {
       event = await verifyWebhook(req);
@@ -75,16 +87,11 @@ export const clerkWebhookRoutes: FastifyPluginAsync = async app => {
       }
 
       processingReserved = true;
-      await upsertUserFromClerkPayload(supportedEvent);
+      const eventTimestamp = parseSvixTimestamp(req.headers['svix-timestamp']);
+      await upsertUserFromClerkPayload(supportedEvent, eventTimestamp);
 
       return reply.code(200).send({ ok: true });
     } catch (error) {
-      if (processingReserved) {
-        await redis.del(idempotencyKey).catch(clearError => {
-          req.log.warn(clearError, 'Failed to clear webhook idempotency key');
-        });
-      }
-
       req.log.error(error, 'Failed to process Clerk webhook');
 
       if (error instanceof AuthSyncError && error.statusCode < 500) {
@@ -94,9 +101,16 @@ export const clerkWebhookRoutes: FastifyPluginAsync = async app => {
         });
       }
 
-      return reply.code(500).send({
-        code: 'WEBHOOK_PROCESSING_FAILED',
-        message: 'Webhook processing failed',
+      if (processingReserved) {
+        await redis.del(idempotencyKey).catch(clearError => {
+          req.log.warn(clearError, 'Failed to clear webhook idempotency key');
+        });
+      }
+
+      const authErr = error instanceof AuthSyncError ? error : null;
+      return reply.code(authErr?.statusCode ?? 500).send({
+        code: authErr?.code ?? 'WEBHOOK_PROCESSING_FAILED',
+        message: authErr?.message ?? 'Webhook processing failed',
       });
     }
   });

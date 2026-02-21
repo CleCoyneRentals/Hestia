@@ -36,6 +36,13 @@ export const uploadRateLimit = new Ratelimit({
   prefix: 'rl:upload',
 });
 
+// Webhook endpoints: 60 requests per 60 seconds
+export const webhookRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(60, '60 s'),
+  prefix: 'rl:webhook',
+});
+
 // ---------- IORedis Client (lazy) ----------
 // Persistent TCP connection. Required by Socket.io adapter (Phase 9) and BullMQ (Phase 5).
 // Lazy-initialized to avoid opening an unused TCP connection until actually needed.

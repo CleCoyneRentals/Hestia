@@ -391,6 +391,7 @@ export async function ensureUserForRequest(
 
 export async function upsertUserFromClerkPayload(
   event: ClerkWebhookEvent,
+  eventTimestamp?: Date,
 ): Promise<void> {
   if (event.type === 'user.deleted') {
     const clerkUserId = event.data.id;
@@ -405,7 +406,7 @@ export async function upsertUserFromClerkPayload(
       where: { clerkUserId },
       data: {
         isActive: false,
-        deletedAt: new Date(),
+        deletedAt: eventTimestamp ?? new Date(),
       },
     });
     return;
