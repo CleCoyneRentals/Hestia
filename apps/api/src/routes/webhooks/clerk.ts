@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { verifyWebhook } from '@clerk/fastify/webhooks';
 import type { WebhookEvent } from '@clerk/fastify/webhooks';
-import { upsertUserFromClerkPayload } from '../../modules/auth/userSync.js';
+import { upsertUserFromClerkPayload, AuthSyncError } from '../../modules/auth/userSync.js';
 import type { ClerkWebhookEvent } from '../../modules/auth/types.js';
 import { redis } from '../../shared/redis.js';
 
@@ -86,6 +86,14 @@ export const clerkWebhookRoutes: FastifyPluginAsync = async app => {
       }
 
       req.log.error(error, 'Failed to process Clerk webhook');
+
+      if (error instanceof AuthSyncError && error.statusCode < 500) {
+        return reply.code(error.statusCode).send({
+          code: error.code,
+          message: error.message,
+        });
+      }
+
       return reply.code(500).send({
         code: 'WEBHOOK_PROCESSING_FAILED',
         message: 'Webhook processing failed',

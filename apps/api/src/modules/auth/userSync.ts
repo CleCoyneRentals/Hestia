@@ -185,6 +185,26 @@ async function upsertIdentity(identity: ClerkIdentity): Promise<AuthSyncResult> 
         });
 
         if (byClerkUserId) {
+          if (byClerkUserId.email !== identity.email) {
+            const emailOwner = await tx.user.findUnique({
+              where: { email: identity.email },
+            });
+
+            if (emailOwner && emailOwner.id !== byClerkUserId.id) {
+              const message = 'Email already linked to another Clerk user';
+              Sentry.captureMessage(message, {
+                level: 'warning',
+                extra: {
+                  email: identity.email,
+                  existingUserId: emailOwner.id,
+                  existingClerkUserId: emailOwner.clerkUserId,
+                  incomingClerkUserId: identity.clerkUserId,
+                },
+              });
+              throw new AuthSyncError(message, 'AUTH_IDENTITY_CONFLICT', 409);
+            }
+          }
+
           const updated = await tx.user.update({
             where: { id: byClerkUserId.id },
             data: {

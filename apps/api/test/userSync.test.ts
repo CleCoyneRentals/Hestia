@@ -171,4 +171,134 @@ describe('userSync', () => {
       code: 'AUTH_IDENTITY_CONFLICT',
     });
   });
+
+  it('creates new user via Clerk API when not found in DB', async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(null);
+
+    clerkClientMock.users.getUser.mockResolvedValueOnce({
+      id: 'clerk_1',
+      primaryEmailAddress: {
+        emailAddress: 'new@example.com',
+        verification: { status: 'verified' },
+      },
+      emailAddresses: [{ emailAddress: 'new@example.com' }],
+      firstName: 'New',
+      lastName: 'User',
+      username: null,
+      imageUrl: null,
+      lastSignInAt: null,
+    });
+
+    const tx = {
+      user: {
+        findUnique: vi.fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(null),
+        update: vi.fn(),
+        create: vi.fn().mockResolvedValue({
+          id: 'user_new',
+          clerkUserId: 'clerk_1',
+          email: 'new@example.com',
+        }),
+      },
+    };
+    prismaMock.$transaction.mockImplementation(async (callback, _options) => callback(tx));
+
+    const result = await ensureUserForRequest('clerk_1', null);
+
+    expect(clerkClientMock.users.getUser).toHaveBeenCalledWith('clerk_1');
+    expect(result).toEqual({ id: 'user_new', clerkUserId: 'clerk_1', email: 'new@example.com' });
+  });
+
+  it('falls back to session claims email when Clerk API fails', async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(null);
+    clerkClientMock.users.getUser.mockRejectedValueOnce(new Error('Clerk API unavailable'));
+
+    const tx = {
+      user: {
+        findUnique: vi.fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(null),
+        update: vi.fn(),
+        create: vi.fn().mockResolvedValue({
+          id: 'user_fallback',
+          clerkUserId: 'clerk_1',
+          email: 'fallback@example.com',
+        }),
+      },
+    };
+    prismaMock.$transaction.mockImplementation(async (callback, _options) => callback(tx));
+
+    const result = await ensureUserForRequest('clerk_1', { email: 'fallback@example.com' });
+
+    expect(clerkClientMock.users.getUser).toHaveBeenCalledWith('clerk_1');
+    expect(sentryMock.captureException).toHaveBeenCalled();
+    expect(result).toEqual({ id: 'user_fallback', clerkUserId: 'clerk_1', email: 'fallback@example.com' });
+  });
+
+  it('soft-deletes user on user.deleted webhook', async () => {
+    prismaMock.user.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    await upsertUserFromClerkPayload({
+      type: 'user.deleted',
+      object: 'event',
+      data: { id: 'clerk_1', deleted: true },
+      event_attributes: {
+        http_request: { client_ip: '127.0.0.1', user_agent: 'vitest' },
+      },
+    } as any);
+
+    expect(prismaMock.user.updateMany).toHaveBeenCalledWith({
+      where: { clerkUserId: 'clerk_1' },
+      data: expect.objectContaining({ isActive: false }),
+    });
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('retries upsertIdentity on P2002 and succeeds on second attempt', async () => {
+    const p2002Error = Object.assign(new Error('Unique constraint violation'), { code: 'P2002' });
+
+    const tx = {
+      user: {
+        findUnique: vi.fn()
+          .mockResolvedValueOnce(null) // byClerkUserId attempt 1
+          .mockResolvedValueOnce(null) // byEmail attempt 1
+          .mockResolvedValueOnce(null) // byClerkUserId attempt 2
+          .mockResolvedValueOnce(null), // byEmail attempt 2
+        update: vi.fn(),
+        create: vi.fn()
+          .mockRejectedValueOnce(p2002Error)
+          .mockResolvedValueOnce({
+            id: 'user_retry',
+            clerkUserId: 'clerk_1',
+            email: 'retry@example.com',
+          }),
+      },
+    };
+    prismaMock.$transaction.mockImplementation(async (callback, _options) => callback(tx));
+
+    await upsertUserFromClerkPayload({
+      type: 'user.created',
+      object: 'event',
+      data: {
+        id: 'clerk_1',
+        first_name: 'Retry',
+        last_name: 'User',
+        username: null,
+        image_url: null,
+        last_sign_in_at: null,
+        primary_email_address_id: 'email_1',
+        email_addresses: [{
+          id: 'email_1',
+          email_address: 'retry@example.com',
+          verification: { status: 'verified' },
+        }],
+      },
+      event_attributes: {
+        http_request: { client_ip: '127.0.0.1', user_agent: 'vitest' },
+      },
+    } as any);
+
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
+  });
 });

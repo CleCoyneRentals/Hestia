@@ -103,4 +103,42 @@ describe('requireAuth', () => {
     });
     expect(sentryCaptureExceptionMock).toHaveBeenCalledTimes(1);
   });
+
+  it('returns 401 and does not call ensureUserForRequest when unauthenticated', async () => {
+    getAuthMock.mockReturnValue({ isAuthenticated: false, userId: null, sessionClaims: null });
+
+    const reply = makeReply();
+    await requireAuth(makeRequest() as any, reply as any);
+
+    expect(reply.code).toHaveBeenCalledWith(401);
+    expect(reply.send).toHaveBeenCalledWith({
+      code: 'UNAUTHORIZED',
+      message: 'Authentication required',
+    });
+    expect(ensureUserForRequestMock).not.toHaveBeenCalled();
+  });
+
+  it('sets req.user when authentication and sync succeed', async () => {
+    getAuthMock.mockReturnValue({
+      isAuthenticated: true,
+      userId: 'clerk_1',
+      sessionClaims: { email: 'user@example.com' },
+    });
+    ensureUserForRequestMock.mockResolvedValueOnce({
+      id: 'user_1',
+      clerkUserId: 'clerk_1',
+      email: 'user@example.com',
+    });
+
+    const req = makeRequest() as any;
+    const reply = makeReply();
+    await requireAuth(req, reply as any);
+
+    expect(req.user).toEqual({
+      id: 'user_1',
+      clerkUserId: 'clerk_1',
+      email: 'user@example.com',
+    });
+    expect(reply.code).not.toHaveBeenCalled();
+  });
 });

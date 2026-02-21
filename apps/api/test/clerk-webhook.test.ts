@@ -19,6 +19,16 @@ vi.mock('@clerk/fastify/webhooks', () => ({
 
 vi.mock('../src/modules/auth/userSync.js', () => ({
   upsertUserFromClerkPayload: upsertUserFromClerkPayloadMock,
+  AuthSyncError: class AuthSyncError extends Error {
+    statusCode: number;
+    code: string;
+    constructor(message: string, code = 'AUTH_USER_SYNC_FAILED', statusCode = 401) {
+      super(message);
+      this.name = 'AuthSyncError';
+      this.code = code;
+      this.statusCode = statusCode;
+    }
+  },
 }));
 
 vi.mock('../src/shared/redis.js', () => ({
