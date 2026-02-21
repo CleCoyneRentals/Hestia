@@ -32,7 +32,7 @@ Going native instead of React Native changes the stack in important ways. Here's
 
 ### What Stays the Same
 
-The entire backend and web stack is unchanged: Fastify API, Neon PostgreSQL, Upstash Redis, Socket.io, BullMQ, Cloudflare R2, Stripe, Clerk/Auth0, OneSignal. Native apps consume the same REST API and WebSocket connections as the web app.
+The entire backend and web stack is unchanged: Fastify API, Neon PostgreSQL, Upstash Redis, Socket.io, BullMQ, Cloudflare R2, Stripe, **Neon Auth**, OneSignal. Native apps consume the same REST API and WebSocket connections as the web app.
 
 ### The Three-Codebase Reality
 
@@ -109,9 +109,8 @@ const envSchema = z.object({
   // Redis
   REDIS_URL: z.string().url(),
 
-  // Auth
-  CLERK_SECRET_KEY: z.string(),
-  CLERK_PUBLISHABLE_KEY: z.string(),
+  // Auth (Neon Auth — JWT verified via JWKS, no shared secret needed)
+  NEON_AUTH_URL: z.string().url(),
 
   // Stripe
   STRIPE_SECRET_KEY: z.string(),
@@ -128,7 +127,6 @@ const envSchema = z.object({
   ONESIGNAL_API_KEY: z.string(),
 
   // Application
-  JWT_SECRET: z.string().min(32),
   CORS_ORIGINS: z.string(),               // Comma-separated allowed origins
   API_URL: z.string().url(),
 });
@@ -146,7 +144,7 @@ For local development, `.env` files are fine (add `.env` to `.gitignore` immedia
 | **Railway** | Built-in environment variables | Set via the Railway dashboard per service per environment. Encrypted at rest. |
 | **AWS (later)** | AWS Secrets Manager or SSM Parameter Store | Secrets stored encrypted, fetched at container startup. Access controlled by IAM roles. |
 | **Neon** | Connection string in dashboard | Copy to your secret manager, never embed in code. |
-| **Clerk** | Dashboard API keys | Copy to your secret manager. Separate keys for dev/staging/production. |
+| **Neon Auth** | Auth URL in Neon Console | Project → Branch → Auth → Configuration. No API key needed — auth uses asymmetric JWTs. |
 
 **Rule 4: Every service gets separate credentials per environment.**
 Never use the same Stripe API key in development and production. You'll accidentally charge real customers while testing. Every third-party service should have isolated credentials per environment:
@@ -155,12 +153,12 @@ Never use the same Stripe API key in development and production. You'll accident
 Development:
   STRIPE_SECRET_KEY=sk_test_...      ← Stripe test mode
   DATABASE_URL=postgres://...dev     ← Neon development branch
-  CLERK_SECRET_KEY=sk_test_...       ← Clerk development instance
+  NEON_AUTH_URL=https://ep-xxx...    ← Neon Auth (dev branch shares auth state)
 
 Production:
   STRIPE_SECRET_KEY=sk_live_...      ← Stripe live mode
   DATABASE_URL=postgres://...main    ← Neon main branch
-  CLERK_SECRET_KEY=sk_live_...       ← Clerk production instance
+  NEON_AUTH_URL=https://ep-xxx...    ← Neon Auth (main branch)
 ```
 
 **Rule 5: Rotate secrets on a schedule.**
@@ -184,9 +182,8 @@ DATABASE_URL_DIRECT=postgresql://user:password@ep-xxx.us-east-2.aws.neon.tech/db
 # Redis (Upstash)
 REDIS_URL=rediss://default:xxx@xxx.upstash.io:6379
 
-# Auth (Clerk)
-CLERK_SECRET_KEY=sk_test_xxx
-CLERK_PUBLISHABLE_KEY=pk_test_xxx
+# Auth (Neon Auth) — get from Neon Console: Project → Branch → Auth → Configuration
+NEON_AUTH_URL=https://ep-xxx.us-east-2.aws.neon.tech/neondb/auth
 
 # Payments (Stripe)
 STRIPE_SECRET_KEY=sk_test_xxx
@@ -203,7 +200,6 @@ ONESIGNAL_APP_ID=xxx
 ONESIGNAL_API_KEY=xxx
 
 # Application
-JWT_SECRET=change-me-to-a-random-32-character-string
 CORS_ORIGINS=http://localhost:3000,http://localhost:19006
 API_URL=http://localhost:3001
 ```
@@ -599,26 +595,25 @@ Everything else builds on this. Do not skip or rush any of these steps.
 ### Phase 1: Authentication & User Management (Weeks 3-4)
 
 **Backend:**
-- [ ] Integrate Clerk SDK (or Auth0) with Fastify
-- [ ] Create auth middleware that verifies JWTs on every request
+- [x] Integrate Neon Auth JWT verification with Fastify (`jose` + JWKS endpoint)
+- [x] Create `authenticate` middleware: verify JWT, auto-provision user on first sign-in (no webhook needed)
+- [x] Create `validateTierLimits` middleware for subscription tier enforcement
 - [ ] Build user profile endpoints: GET/PATCH /api/users/me
-- [ ] Build user registration webhook handler (Clerk sends a webhook when a user signs up; create the database record)
-- [ ] Implement refresh token rotation if using custom JWT layer on top of Clerk
 - [ ] Set up rate limiting on auth endpoints (10 requests/minute)
 
 **iOS:**
-- [ ] Integrate Clerk iOS SDK (or Auth0.swift)
+- [ ] Build `NeonAuthClient.swift`: REST API client for sign-in, Apple Sign-In, and token refresh (no native SDK — call Neon Auth REST API directly; see `auth-provider-comparison.md` for full example)
 - [ ] Build sign-up screen (email + password, or Apple Sign-In)
 - [ ] Build login screen
 - [ ] Build profile management screen
-- [ ] Implement automatic token refresh on 401 responses
-- [ ] Store tokens in Keychain
+- [ ] Implement `AuthInterceptor.swift`: intercept 401s, call `/token` to refresh JWT, retry request once
+- [ ] Store tokens in Keychain (never UserDefaults)
 
 **Web:**
-- [ ] Integrate Clerk Next.js SDK
-- [ ] Build sign-up and login pages
+- [x] Integrate Neon Auth (`@neondatabase/auth`) with Next.js — `NeonAuthUIProvider`, `AuthView`, `AccountView`
+- [x] Build sign-up and login pages (`/auth/[path]`)
+- [x] Set up protected routes via `middleware.ts` (redirects to `/auth/sign-in`)
 - [ ] Build profile page
-- [ ] Set up protected routes (redirect to login if not authenticated)
 
 **Deliverable:** Users can create accounts and log in from iOS and web. Auth tokens are managed securely.
 
@@ -785,7 +780,7 @@ This is the differentiating feature. Build it after basic inventory works.
 
 **Backend:**
 - [ ] Build invitation system:
-  - POST /api/homes/:homeId/members (sends invite email via Clerk/SendGrid)
+  - POST /api/homes/:homeId/members (sends invite email via SendGrid/Resend)
   - PATCH /api/invitations/:id/accept
   - DELETE /api/homes/:homeId/members/:userId (remove member)
 - [ ] Implement role-based access control:
