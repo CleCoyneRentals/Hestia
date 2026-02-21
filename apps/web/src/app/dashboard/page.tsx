@@ -1,8 +1,7 @@
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { currentUser } from '@clerk/nextjs/server'
 import { UserButton } from '@clerk/nextjs'
 
 export default async function DashboardPage() {
-  const { userId } = await auth()
   const user = await currentUser()
 
   return (
@@ -13,7 +12,6 @@ export default async function DashboardPage() {
       </header>
       <section style={{ padding: '1rem' }}>
         <p>Welcome, {user?.firstName ?? 'User'}!</p>
-        <p>Clerk ID: {userId}</p>
       </section>
     </main>
   )

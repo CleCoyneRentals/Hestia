@@ -151,77 +151,116 @@ function toAuthSyncResult(user: {
   };
 }
 
+const MAX_UPSERT_RETRIES = 3;
+const UPSERT_RETRYABLE_PRISMA_CODES = new Set(['P2002', 'P2034']);
+
+function isRetryableUpsertError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const code = 'code' in error && typeof error.code === 'string'
+    ? error.code
+    : null;
+
+  if (code && UPSERT_RETRYABLE_PRISMA_CODES.has(code)) {
+    return true;
+  }
+
+  const message = 'message' in error && typeof error.message === 'string'
+    ? error.message.toLowerCase()
+    : '';
+
+  return message.includes('could not serialize access')
+    || message.includes('serialization')
+    || message.includes('deadlock detected');
+}
+
 async function upsertIdentity(identity: ClerkIdentity): Promise<AuthSyncResult> {
-  const byClerkUserId = await prisma.user.findUnique({
-    where: { clerkUserId: identity.clerkUserId },
-  });
+  for (let attempt = 1; attempt <= MAX_UPSERT_RETRIES; attempt += 1) {
+    try {
+      return await prisma.$transaction(async tx => {
+        const byClerkUserId = await tx.user.findUnique({
+          where: { clerkUserId: identity.clerkUserId },
+        });
 
-  if (byClerkUserId) {
-    const updated = await prisma.user.update({
-      where: { id: byClerkUserId.id },
-      data: {
-        email: identity.email,
-        displayName: identity.displayName,
-        avatarUrl: identity.avatarUrl,
-        emailVerified: identity.emailVerified,
-        isActive: true,
-        deletedAt: null,
-        ...(identity.lastLoginAt ? { lastLoginAt: identity.lastLoginAt } : {}),
-      },
-    });
+        if (byClerkUserId) {
+          const updated = await tx.user.update({
+            where: { id: byClerkUserId.id },
+            data: {
+              email: identity.email,
+              displayName: identity.displayName,
+              avatarUrl: identity.avatarUrl,
+              emailVerified: identity.emailVerified,
+              isActive: true,
+              deletedAt: null,
+              ...(identity.lastLoginAt ? { lastLoginAt: identity.lastLoginAt } : {}),
+            },
+          });
 
-    return toAuthSyncResult(updated);
-  }
+          return toAuthSyncResult(updated);
+        }
 
-  const byEmail = await prisma.user.findUnique({
-    where: { email: identity.email },
-  });
+        const byEmail = await tx.user.findUnique({
+          where: { email: identity.email },
+        });
 
-  if (byEmail) {
-    if (byEmail.clerkUserId && byEmail.clerkUserId !== identity.clerkUserId) {
-      const message = 'Email already linked to another Clerk user';
-      Sentry.captureMessage(message, {
-        level: 'warning',
-        extra: {
-          email: identity.email,
-          existingClerkUserId: byEmail.clerkUserId,
-          incomingClerkUserId: identity.clerkUserId,
-        },
+        if (byEmail) {
+          if (byEmail.clerkUserId && byEmail.clerkUserId !== identity.clerkUserId) {
+            const message = 'Email already linked to another Clerk user';
+            Sentry.captureMessage(message, {
+              level: 'warning',
+              extra: {
+                email: identity.email,
+                existingClerkUserId: byEmail.clerkUserId,
+                incomingClerkUserId: identity.clerkUserId,
+              },
+            });
+
+            throw new AuthSyncError(message, 'AUTH_IDENTITY_CONFLICT', 409);
+          }
+
+          const updated = await tx.user.update({
+            where: { id: byEmail.id },
+            data: {
+              clerkUserId: identity.clerkUserId,
+              displayName: identity.displayName,
+              avatarUrl: identity.avatarUrl,
+              emailVerified: identity.emailVerified,
+              isActive: true,
+              deletedAt: null,
+              ...(identity.lastLoginAt ? { lastLoginAt: identity.lastLoginAt } : {}),
+            },
+          });
+
+          return toAuthSyncResult(updated);
+        }
+
+        const created = await tx.user.create({
+          data: {
+            clerkUserId: identity.clerkUserId,
+            email: identity.email,
+            displayName: identity.displayName,
+            avatarUrl: identity.avatarUrl,
+            emailVerified: identity.emailVerified,
+            isActive: true,
+            deletedAt: null,
+            lastLoginAt: identity.lastLoginAt,
+          },
+        });
+
+        return toAuthSyncResult(created);
+      }, {
+        isolationLevel: 'Serializable',
       });
-
-      throw new AuthSyncError(message, 'AUTH_IDENTITY_CONFLICT', 409);
+    } catch (error) {
+      if (attempt === MAX_UPSERT_RETRIES || !isRetryableUpsertError(error)) {
+        throw error;
+      }
     }
-
-    const updated = await prisma.user.update({
-      where: { id: byEmail.id },
-      data: {
-        clerkUserId: identity.clerkUserId,
-        displayName: identity.displayName,
-        avatarUrl: identity.avatarUrl,
-        emailVerified: identity.emailVerified,
-        isActive: true,
-        deletedAt: null,
-        ...(identity.lastLoginAt ? { lastLoginAt: identity.lastLoginAt } : {}),
-      },
-    });
-
-    return toAuthSyncResult(updated);
   }
 
-  const created = await prisma.user.create({
-    data: {
-      clerkUserId: identity.clerkUserId,
-      email: identity.email,
-      displayName: identity.displayName,
-      avatarUrl: identity.avatarUrl,
-      emailVerified: identity.emailVerified,
-      isActive: true,
-      deletedAt: null,
-      lastLoginAt: identity.lastLoginAt,
-    },
-  });
-
-  return toAuthSyncResult(created);
+  throw new Error('Unreachable upsert retry branch');
 }
 
 export async function ensureUserForRequest(
@@ -233,6 +272,24 @@ export async function ensureUserForRequest(
   });
 
   if (existing) {
+    if (!existing.isActive || existing.deletedAt) {
+      const error = new AuthSyncError(
+        'User account is inactive',
+        'AUTH_USER_INACTIVE',
+        403,
+      );
+      Sentry.captureException(error, {
+        extra: {
+          clerkUserId,
+          userId: existing.id,
+          isActive: existing.isActive,
+          deletedAt: existing.deletedAt,
+          stage: 'ensureUserForRequest',
+        },
+      });
+      throw error;
+    }
+
     return toAuthSyncResult(existing);
   }
 

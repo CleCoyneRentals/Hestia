@@ -29,7 +29,11 @@ export async function requireAuth(
 
     const authError = error instanceof AuthSyncError
       ? error
-      : new AuthSyncError('Failed to sync authenticated user');
+      : new AuthSyncError(
+        'Failed to sync authenticated user',
+        'AUTH_USER_SYNC_INTERNAL',
+        500,
+      );
 
     Sentry.captureException(error, {
       extra: {
@@ -38,7 +42,7 @@ export async function requireAuth(
       },
     });
 
-    reply.code(authError.statusCode).send({
+    return reply.code(authError.statusCode).send({
       code: authError.code,
       message: authError.message,
     });

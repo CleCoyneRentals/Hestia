@@ -1,0 +1,10 @@
+process.env.NODE_ENV ??= 'development';
+process.env.PORT ??= '3001';
+process.env.DATABASE_URL ??= 'postgresql://postgres:postgres@localhost:5432/hestia';
+process.env.DATABASE_URL_DIRECT ??= 'postgresql://postgres:postgres@localhost:5432/hestia';
+process.env.REDIS_URL ??= 'redis://localhost:6379';
+process.env.UPSTASH_REDIS_REST_URL ??= 'https://example.upstash.io';
+process.env.UPSTASH_REDIS_REST_TOKEN ??= 'test-token';
+process.env.CLERK_SECRET_KEY ??= 'sk_test_fake';
+process.env.CLERK_WEBHOOK_SIGNING_SECRET ??= 'whsec_test_fake';
+process.env.CLERK_PUBLISHABLE_KEY ??= 'pk_test_fake';
