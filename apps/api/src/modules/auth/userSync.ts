@@ -176,6 +176,28 @@ function isRetryableUpsertError(error: unknown): boolean {
     || message.includes('deadlock detected');
 }
 
+function clerkLookupStatus(error: unknown): number | null {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+
+  const rawStatus = 'status' in error ? error.status : undefined;
+  if (typeof rawStatus === 'number') {
+    return rawStatus;
+  }
+
+  const rawStatusCode = 'statusCode' in error ? error.statusCode : undefined;
+  if (typeof rawStatusCode === 'number') {
+    return rawStatusCode;
+  }
+
+  return null;
+}
+
+function isPermanentClerkLookupError(status: number | null): boolean {
+  return status === 403 || status === 404;
+}
+
 async function upsertIdentity(identity: ClerkIdentity): Promise<AuthSyncResult> {
   for (let attempt = 1; attempt <= MAX_UPSERT_RETRIES; attempt += 1) {
     try {
@@ -319,9 +341,25 @@ export async function ensureUserForRequest(
     const clerkUser = await clerkClient.users.getUser(clerkUserId);
     identity = clerkIdentityFromUser(clerkUser);
   } catch (error) {
+    const clerkLookupStatusCode = clerkLookupStatus(error);
+    const permanentLookupError = isPermanentClerkLookupError(clerkLookupStatusCode);
+
     Sentry.captureException(error, {
-      extra: { clerkUserId, stage: 'clerkClient.users.getUser' },
+      extra: {
+        clerkUserId,
+        stage: 'clerkClient.users.getUser',
+        clerkLookupStatus: clerkLookupStatusCode,
+        isPermanentLookupError: permanentLookupError,
+      },
     });
+
+    if (permanentLookupError) {
+      throw new AuthSyncError(
+        'Authenticated Clerk user could not be validated',
+        'AUTH_CLERK_USER_NOT_ACCESSIBLE',
+        401,
+      );
+    }
   }
 
   if (!identity) {

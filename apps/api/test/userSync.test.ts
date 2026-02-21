@@ -210,7 +210,35 @@ describe('userSync', () => {
     expect(result).toEqual({ id: 'user_new', clerkUserId: 'clerk_1', email: 'new@example.com' });
   });
 
-  it('falls back to session claims email when Clerk API fails', async () => {
+  it('rejects when Clerk lookup returns 404 even if claims email exists', async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(null);
+    clerkClientMock.users.getUser.mockRejectedValueOnce(Object.assign(new Error('not found'), { status: 404 }));
+
+    await expect(
+      ensureUserForRequest('clerk_1', { email: 'fallback@example.com' }),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'AUTH_CLERK_USER_NOT_ACCESSIBLE',
+    });
+
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects when Clerk lookup returns 403', async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(null);
+    clerkClientMock.users.getUser.mockRejectedValueOnce(Object.assign(new Error('forbidden'), { status: 403 }));
+
+    await expect(
+      ensureUserForRequest('clerk_1', { email: 'fallback@example.com' }),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'AUTH_CLERK_USER_NOT_ACCESSIBLE',
+    });
+
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('falls back to claims on transient Clerk lookup error', async () => {
     prismaMock.user.findUnique.mockResolvedValueOnce(null);
     clerkClientMock.users.getUser.mockRejectedValueOnce(new Error('Clerk API unavailable'));
 
