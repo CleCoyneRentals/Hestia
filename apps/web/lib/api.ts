@@ -16,14 +16,20 @@ export async function apiFetch(
   path: string,
   init?: RequestInit
 ): Promise<Response> {
-  const { data } = await authClient.token();
+  const { data, error } = await authClient.token();
+
+  if (error || !data?.token) {
+    throw new Error(
+      "Failed to retrieve auth token — user may need to re-authenticate"
+    );
+  }
 
   return fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
       ...init?.headers,
-      ...(data?.token ? { Authorization: `Bearer ${data.token}` } : {}),
+      Authorization: `Bearer ${data.token}`,
     },
   });
 }

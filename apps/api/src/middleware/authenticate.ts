@@ -11,35 +11,44 @@ const jwksUrl = new URL('/.well-known/jwks.json', new URL(env.NEON_AUTH_URL).ori
 const JWKS = createRemoteJWKSet(jwksUrl);
 
 export async function authenticate(req: FastifyRequest, reply: FastifyReply) {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
     return reply.status(401).send({ code: 'UNAUTHORIZED', message: 'Missing authorization token' });
   }
+  const token = authHeader.slice(7);
 
+  // Only catch JWT verification errors as 401 — DB errors bubble to the global error handler as 500.
+  let payload;
   try {
-    const { payload } = await jwtVerify(token, JWKS);
-    const authId = payload.sub!;
-
-    let user = await prisma.user.findUnique({ where: { authId } });
-
-    if (!user) {
-      // First sign-in: auto-provision the user account from JWT claims.
-      // No webhook needed — Neon Auth user data is already trusted (verified JWT).
-      user = await prisma.user.create({
-        data: {
-          authId,
-          email: payload.email as string,
-          displayName:
-            (payload.name as string | undefined) ??
-            (payload.email as string).split('@')[0],
-          emailVerified: Boolean(payload.emailVerified),
-          subscription: { create: {} }, // default free tier
-        },
-      });
-    }
-
-    req.user = { id: user.id };
+    ({ payload } = await jwtVerify(token, JWKS));
   } catch {
     return reply.status(401).send({ code: 'TOKEN_EXPIRED', message: 'Invalid or expired token' });
   }
+
+  const authId = payload.sub;
+  if (!authId) {
+    return reply.status(401).send({ code: 'UNAUTHORIZED', message: 'Token missing subject claim' });
+  }
+
+  const email = payload.email as string | undefined;
+  if (!email) {
+    return reply.status(401).send({ code: 'UNAUTHORIZED', message: 'Token missing email claim' });
+  }
+
+  const name = payload.name as string | undefined;
+
+  // Upsert is atomic — safe against concurrent first-login requests from SPAs.
+  const user = await prisma.user.upsert({
+    where: { authId },
+    update: {},
+    create: {
+      authId,
+      email,
+      displayName: name ?? email.split('@')[0],
+      emailVerified: Boolean(payload.email_verified),
+      subscription: { create: {} },
+    },
+  });
+
+  req.user = { id: user.id };
 }
