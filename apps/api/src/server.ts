@@ -37,12 +37,6 @@ await app.register(cors, {
   credentials: true,
 });
 
-console.log('--- CLERK ENV VARS ---');
-console.log('CLERK_PUBLISHABLE_KEY:', process.env.CLERK_PUBLISHABLE_KEY ? '(set, length: ' + process.env.CLERK_PUBLISHABLE_KEY.length + ')' : '(not set)');
-console.log('CLERK_SECRET_KEY:', process.env.CLERK_SECRET_KEY ? '(set)' : '(not set)');
-console.log('--- raw value of CLERK_PUBLISHABLE_KEY ---');
-console.log(process.env.CLERK_PUBLISHABLE_KEY);
-
 await app.register(clerkPlugin);
 
 // Note: Rate limiting is handled per-route via Upstash middleware (src/middleware/rateLimit.ts)
