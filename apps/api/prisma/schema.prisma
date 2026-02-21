@@ -12,7 +12,7 @@ datasource db {
 
 model User {
   id            String    @id @default(uuid())
-  authId        String    @unique @map("auth_id")    // Neon Auth user ID (JWT sub claim)
+  authId        String    @unique @map("auth_id")    // Neon Auth user ID (JWT sub claim) - UUID format
   email         String    @unique
   displayName   String    @map("display_name")
   avatarUrl     String?   @map("avatar_url")

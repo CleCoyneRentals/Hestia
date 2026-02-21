@@ -21,8 +21,9 @@ export async function authenticate(req: FastifyRequest, reply: FastifyReply) {
   let payload;
   try {
     ({ payload } = await jwtVerify(token, JWKS));
-  } catch {
-    return reply.status(401).send({ code: 'TOKEN_EXPIRED', message: 'Invalid or expired token' });
+  } catch (error) {
+    req.log.warn(error, 'JWT verification failed');
+    return reply.status(401).send({ code: 'TOKEN_INVALID', message: 'Invalid or expired token' });
   }
 
   const authId = payload.sub;
@@ -38,9 +39,14 @@ export async function authenticate(req: FastifyRequest, reply: FastifyReply) {
   const name = payload.name as string | undefined;
 
   // Upsert is atomic — safe against concurrent first-login requests from SPAs.
+  // email and emailVerified are authoritative from the auth provider and sync on every login.
+  // displayName is set on first login only (users may customize it later in-app).
   const user = await prisma.user.upsert({
     where: { authId },
-    update: {},
+    update: {
+      email,
+      emailVerified: Boolean(payload.email_verified),
+    },
     create: {
       authId,
       email,

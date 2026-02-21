@@ -6,8 +6,13 @@ type Resource = 'homes' | 'items' | 'tasks';
 
 export function requireTierCapacity(resource: Resource) {
   return async (req: FastifyRequest, reply: FastifyReply) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return reply.status(401).send({ code: 'UNAUTHORIZED', message: 'Authentication required' });
+    }
+
     const user = await prisma.user.findUnique({
-      where: { id: req.user!.id },
+      where: { id: userId },
       select: { subscription: { select: { tier: true } } },
     });
 
@@ -15,7 +20,7 @@ export function requireTierCapacity(resource: Resource) {
     const limits = TIER_LIMITS[tier];
 
     if (resource === 'homes') {
-      const count = await prisma.home.count({ where: { ownerId: req.user!.id } });
+      const count = await prisma.home.count({ where: { ownerId: userId } });
       if (!isUnlimited(limits.maxHomes) && count >= limits.maxHomes) {
         return reply.status(403).send({ code: 'TIER_LIMIT_HOMES' });
       }
