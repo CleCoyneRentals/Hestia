@@ -14,7 +14,7 @@ export class AuthSyncError extends Error {
   statusCode: number;
   code: string;
 
-  constructor(message: string, code = 'AUTH_USER_SYNC_FAILED', statusCode = 401) {
+  constructor(message: string, code: string, statusCode: number) {
     super(message);
     this.name = 'AuthSyncError';
     this.code = code;
@@ -23,6 +23,7 @@ export class AuthSyncError extends Error {
 }
 
 function normalizeEmail(email: string): string {
+  // Note: does not handle Gmail dot-insensitivity or subaddressing (user+tag@domain).
   return email.trim().toLowerCase();
 }
 
@@ -152,6 +153,11 @@ function toAuthSyncResult(user: {
 }
 
 const MAX_UPSERT_RETRIES = 3;
+// P2002 (unique constraint) is intentionally retryable: under Serializable isolation,
+// two concurrent transactions can both pass the findUnique checks and race to create.
+// The retry finds the winner's row in findUnique and updates instead of creating.
+// Deterministic email conflicts (different clerkUserIds) are caught by the explicit
+// conflict guards before any DB write, so P2002 in practice signals a true race.
 const UPSERT_RETRYABLE_PRISMA_CODES = new Set(['P2002', 'P2034']);
 
 function isRetryableUpsertError(error: unknown): boolean {
@@ -195,10 +201,14 @@ function clerkLookupStatus(error: unknown): number | null {
 }
 
 function isPermanentClerkLookupError(status: number | null): boolean {
-  return status === 403 || status === 404;
+  // 401 = bad/expired CLERK_SECRET_KEY (permanent config error, not transient)
+  return status === 401 || status === 403 || status === 404;
 }
 
-async function upsertIdentity(identity: ClerkIdentity): Promise<AuthSyncResult> {
+async function upsertIdentity(
+  identity: ClerkIdentity,
+  options = { reactivate: true },
+): Promise<AuthSyncResult> {
   for (let attempt = 1; attempt <= MAX_UPSERT_RETRIES; attempt += 1) {
     try {
       return await prisma.$transaction(async tx => {
@@ -234,8 +244,7 @@ async function upsertIdentity(identity: ClerkIdentity): Promise<AuthSyncResult> 
               displayName: identity.displayName,
               avatarUrl: identity.avatarUrl,
               emailVerified: identity.emailVerified,
-              isActive: true,
-              deletedAt: null,
+              ...(options.reactivate ? { isActive: true, deletedAt: null } : {}),
               ...(identity.lastLoginAt ? { lastLoginAt: identity.lastLoginAt } : {}),
             },
           });
@@ -262,6 +271,17 @@ async function upsertIdentity(identity: ClerkIdentity): Promise<AuthSyncResult> 
             throw new AuthSyncError(message, 'AUTH_IDENTITY_CONFLICT', 409);
           }
 
+          // Require verified email before linking a legacy (pre-Clerk) account.
+          // Without this gate, an attacker registering with another user's email
+          // could claim their local account before verification completes.
+          if (!byEmail.clerkUserId && !identity.emailVerified) {
+            throw new AuthSyncError(
+              'Email verification required to link existing account',
+              'AUTH_EMAIL_VERIFICATION_REQUIRED',
+              403,
+            );
+          }
+
           const updated = await tx.user.update({
             where: { id: byEmail.id },
             data: {
@@ -269,8 +289,7 @@ async function upsertIdentity(identity: ClerkIdentity): Promise<AuthSyncResult> 
               displayName: identity.displayName,
               avatarUrl: identity.avatarUrl,
               emailVerified: identity.emailVerified,
-              isActive: true,
-              deletedAt: null,
+              ...(options.reactivate ? { isActive: true, deletedAt: null } : {}),
               ...(identity.lastLoginAt ? { lastLoginAt: identity.lastLoginAt } : {}),
             },
           });
@@ -309,6 +328,8 @@ export async function ensureUserForRequest(
   clerkUserId: string,
   claims?: RequestClaims | null,
 ): Promise<AuthSyncResult> {
+  // TODO(perf): Cache this lookup in Redis with a short TTL (30-60s) to avoid a
+  // DB round-trip on every authenticated request. See future caching task.
   const existing = await prisma.user.findUnique({
     where: { clerkUserId },
   });
@@ -425,5 +446,7 @@ export async function upsertUserFromClerkPayload(
     throw error;
   }
 
-  await upsertIdentity(identity);
+  // user.updated should not reactivate a soft-deleted account — a stale or retried
+  // webhook must not undo a user.deleted soft-delete.
+  await upsertIdentity(identity, { reactivate: event.type === 'user.created' });
 }

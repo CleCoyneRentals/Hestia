@@ -5,7 +5,7 @@ declare module 'fastify' {
     user?: {
       id: string;
       clerkUserId: string;
-      email?: string;
+      email: string;
     };
   }
 }

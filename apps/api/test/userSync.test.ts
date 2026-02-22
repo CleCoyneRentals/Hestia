@@ -283,6 +283,169 @@ describe('userSync', () => {
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
+  it('throws AUTH_EMAIL_MISSING when Clerk lookup fails transiently and no claims email', async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(null);
+    clerkClientMock.users.getUser.mockRejectedValueOnce(new Error('Clerk API unavailable'));
+
+    await expect(
+      ensureUserForRequest('clerk_1', null),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'AUTH_EMAIL_MISSING',
+    });
+
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('throws conflict when byClerkUserId email changes to one owned by another user', async () => {
+    const tx = {
+      user: {
+        findUnique: vi.fn()
+          .mockResolvedValueOnce({ id: 'user_1', clerkUserId: 'clerk_1', email: 'old@example.com' })
+          .mockResolvedValueOnce({ id: 'user_2', email: 'new@example.com', clerkUserId: 'clerk_other' }),
+        update: vi.fn(),
+        create: vi.fn(),
+      },
+    };
+
+    prismaMock.$transaction.mockImplementation(async callback => callback(tx));
+
+    await expect(upsertUserFromClerkPayload({
+      type: 'user.updated',
+      object: 'event',
+      data: {
+        id: 'clerk_1',
+        first_name: 'User',
+        last_name: 'One',
+        username: null,
+        image_url: null,
+        last_sign_in_at: null,
+        primary_email_address_id: 'email_1',
+        email_addresses: [{ id: 'email_1', email_address: 'new@example.com', verification: { status: 'verified' } }],
+      },
+      event_attributes: { http_request: { client_ip: '127.0.0.1', user_agent: 'vitest' } },
+    } as any)).rejects.toMatchObject({ statusCode: 409, code: 'AUTH_IDENTITY_CONFLICT' });
+  });
+
+  it('throws AUTH_EMAIL_MISSING when user.created has empty email list', async () => {
+    await expect(upsertUserFromClerkPayload({
+      type: 'user.created',
+      object: 'event',
+      data: {
+        id: 'clerk_1',
+        first_name: 'No',
+        last_name: 'Email',
+        username: null,
+        image_url: null,
+        last_sign_in_at: null,
+        primary_email_address_id: null,
+        email_addresses: [],
+      },
+      event_attributes: { http_request: { client_ip: '127.0.0.1', user_agent: 'vitest' } },
+    } as any)).rejects.toMatchObject({ statusCode: 400, code: 'AUTH_EMAIL_MISSING' });
+
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('logs warning and skips updateMany when user.deleted has no id', async () => {
+    await upsertUserFromClerkPayload({
+      type: 'user.deleted',
+      object: 'event',
+      data: { id: null, deleted: true },
+      event_attributes: { http_request: { client_ip: '127.0.0.1', user_agent: 'vitest' } },
+    } as any);
+
+    expect(sentryMock.captureMessage).toHaveBeenCalledWith(
+      'Received Clerk user.deleted webhook without user id',
+      expect.objectContaining({ level: 'warning' }),
+    );
+    expect(prismaMock.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('treats Clerk 401 as permanent — does not fall through to claims-based identity', async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(null);
+    clerkClientMock.users.getUser.mockRejectedValueOnce(
+      Object.assign(new Error('unauthorized'), { status: 401 }),
+    );
+
+    await expect(
+      ensureUserForRequest('clerk_1', { email: 'fallback@example.com' }),
+    ).rejects.toMatchObject({ statusCode: 401, code: 'AUTH_CLERK_USER_NOT_ACCESSIBLE' });
+
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('user.updated does not reactivate a soft-deleted user', async () => {
+    const softDeletedUser = {
+      id: 'user_1',
+      clerkUserId: 'clerk_1',
+      email: 'user@example.com',
+      isActive: false,
+      deletedAt: new Date('2026-01-01'),
+    };
+    const tx = {
+      user: {
+        findUnique: vi.fn().mockResolvedValueOnce(softDeletedUser),
+        update: vi.fn().mockResolvedValue(softDeletedUser),
+        create: vi.fn(),
+      },
+    };
+
+    prismaMock.$transaction.mockImplementation(async callback => callback(tx));
+
+    await upsertUserFromClerkPayload({
+      type: 'user.updated',
+      object: 'event',
+      data: {
+        id: 'clerk_1',
+        first_name: 'User',
+        last_name: 'One',
+        username: null,
+        image_url: null,
+        last_sign_in_at: null,
+        primary_email_address_id: 'email_1',
+        email_addresses: [{ id: 'email_1', email_address: 'user@example.com', verification: { status: 'verified' } }],
+      },
+      event_attributes: { http_request: { client_ip: '127.0.0.1', user_agent: 'vitest' } },
+    } as any);
+
+    const updateCallData = (tx.user.update.mock.calls[0] as any[])[0].data;
+    expect(updateCallData).not.toHaveProperty('isActive');
+    expect(updateCallData).not.toHaveProperty('deletedAt');
+  });
+
+  it('blocks legacy account link when email is not verified', async () => {
+    const tx = {
+      user: {
+        findUnique: vi.fn()
+          .mockResolvedValueOnce(null) // byClerkUserId → not found
+          .mockResolvedValueOnce({ id: 'legacy_user', email: 'legacy@example.com', clerkUserId: null }),
+        update: vi.fn(),
+        create: vi.fn(),
+      },
+    };
+
+    prismaMock.$transaction.mockImplementation(async callback => callback(tx));
+
+    await expect(upsertUserFromClerkPayload({
+      type: 'user.created',
+      object: 'event',
+      data: {
+        id: 'clerk_new',
+        first_name: 'New',
+        last_name: 'User',
+        username: null,
+        image_url: null,
+        last_sign_in_at: null,
+        primary_email_address_id: 'email_1',
+        email_addresses: [{ id: 'email_1', email_address: 'legacy@example.com', verification: { status: 'unverified' } }],
+      },
+      event_attributes: { http_request: { client_ip: '127.0.0.1', user_agent: 'vitest' } },
+    } as any)).rejects.toMatchObject({ statusCode: 403, code: 'AUTH_EMAIL_VERIFICATION_REQUIRED' });
+
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
   it('retries upsertIdentity on P2002 and succeeds on second attempt', async () => {
     const p2002Error = Object.assign(new Error('Unique constraint violation'), { code: 'P2002' });
 

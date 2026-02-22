@@ -174,6 +174,88 @@ describe('clerk webhook route', () => {
     expect(redisDelMock).toHaveBeenCalledWith('clerk-webhook:svix:msg_3');
   });
 
+  it('returns 400 INVALID_WEBHOOK when signature verification fails', async () => {
+    verifyWebhookMock.mockRejectedValueOnce(new Error('Invalid signature'));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/clerk',
+      headers: { 'svix-id': 'msg_bad' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      code: 'INVALID_WEBHOOK',
+      message: 'Webhook verification failed',
+    });
+    expect(redisSetMock).not.toHaveBeenCalled();
+    expect(upsertUserFromClerkPayloadMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 200 ok for unsupported event type without touching idempotency or upsert', async () => {
+    verifyWebhookMock.mockResolvedValueOnce({
+      type: 'organization.created',
+      object: 'event',
+      data: { id: 'org_123' },
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/clerk',
+      headers: { 'svix-id': 'msg_org' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true });
+    expect(redisSetMock).not.toHaveBeenCalled();
+    expect(upsertUserFromClerkPayloadMock).not.toHaveBeenCalled();
+  });
+
+  it('clears idempotency key and preserves 5xx AuthSyncError status/code/message', async () => {
+    verifyWebhookMock.mockResolvedValueOnce(makeUserEvent('user.created'));
+    redisSetMock.mockResolvedValueOnce('OK');
+    upsertUserFromClerkPayloadMock.mockRejectedValueOnce(
+      new AuthSyncErrorMock('Upstream sync error', 'AUTH_UPSTREAM_FAILURE', 503),
+    );
+    redisDelMock.mockResolvedValueOnce(1);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/clerk',
+      headers: { 'svix-id': 'msg_5xx' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      code: 'AUTH_UPSTREAM_FAILURE',
+      message: 'Upstream sync error',
+    });
+    expect(redisDelMock).toHaveBeenCalledWith('clerk-webhook:svix:msg_5xx');
+  });
+
+  it('uses fallback idempotency key when svix-id header is absent', async () => {
+    verifyWebhookMock.mockResolvedValueOnce(makeUserEvent('user.created'));
+    redisSetMock.mockResolvedValueOnce('OK');
+    upsertUserFromClerkPayloadMock.mockResolvedValueOnce(undefined);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/clerk',
+      // no svix-id header
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(redisSetMock).toHaveBeenCalledWith(
+      'clerk-webhook:fallback:user.created:user_123',
+      '1',
+      { nx: true, ex: 86400 },
+    );
+  });
+
   it('preserves non-5xx AuthSyncError response and keeps idempotency key', async () => {
     verifyWebhookMock.mockResolvedValueOnce(makeUserEvent('user.created'));
     redisSetMock.mockResolvedValueOnce('OK');
