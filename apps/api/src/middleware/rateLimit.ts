@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { standardRateLimit, webhookRateLimit } from '../shared/redis.js';
+import { authRateLimit, standardRateLimit, webhookRateLimit } from '../shared/redis.js';
 
 type RateLimitResult = {
   success: boolean;
@@ -45,6 +45,17 @@ export async function rateLimitMiddleware(
   reply: FastifyReply,
 ) {
   return applyRateLimit(req, reply, standardRateLimit);
+}
+
+/**
+ * Auth-specific rate limit middleware.
+ * Keeps authentication/profile endpoints at 10 requests/minute.
+ */
+export async function authRateLimitMiddleware(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  return applyRateLimit(req, reply, authRateLimit);
 }
 
 /**

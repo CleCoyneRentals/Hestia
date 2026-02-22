@@ -1,0 +1,630 @@
+openapi: 3.0.3
+info:
+  title: Hestia API
+  version: 0.1.0
+  description: |
+    Current API contract for the implemented backend endpoints.
+    This spec includes:
+    - All active HTTP endpoints
+    - Request/response payload models
+    - Domain models currently present in Prisma (for reference)
+servers:
+  - url: http://localhost:3001
+    description: Local development
+  - url: https://api.example.com
+    description: Production placeholder
+tags:
+  - name: Health
+  - name: Auth
+  - name: Users
+  - name: Webhooks
+  - name: Domain Models
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get authenticated user context
+      description: Returns the authenticated user info attached by auth middleware.
+      operationId: getAuthMe
+      security:
+        - clerkBearerAuth: []
+      responses:
+        '200':
+          description: Authenticated user context
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMeResponse'
+        '401':
+          description: Authentication required or auth sync failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                unauthenticated:
+                  value:
+                    code: UNAUTHORIZED
+                    message: Authentication required
+        '403':
+          description: Authenticated account is inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Auth endpoint rate limit exceeded (10 req/minute)
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitedErrorResponse'
+  /api/users/me:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      operationId: getCurrentUserProfile
+      security:
+        - clerkBearerAuth: []
+      responses:
+        '200':
+          description: Current user profile
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User profile does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                userNotFound:
+                  value:
+                    code: USER_NOT_FOUND
+                    message: User profile not found
+        '429':
+          description: Auth endpoint rate limit exceeded (10 req/minute)
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitedErrorResponse'
+    patch:
+      tags: [Users]
+      summary: Update current user profile
+      description: |
+        Updates profile fields managed by the app database.
+        At least one of `displayName` or `avatarUrl` must be provided.
+        Set `avatarUrl` to `null` or empty string to clear it.
+      operationId: patchCurrentUserProfile
+      security:
+        - clerkBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfileUpdateRequest'
+            examples:
+              renameAndClearAvatar:
+                value:
+                  displayName: Pat Coyne
+                  avatarUrl: ""
+      responses:
+        '200':
+          description: Updated profile
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvalidPayloadResponse'
+              examples:
+                missingFields:
+                  value:
+                    code: INVALID_PAYLOAD
+                    message: Invalid profile update payload
+                    issues:
+                      - path: ""
+                        message: At least one field must be provided
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User profile does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Auth endpoint rate limit exceeded (10 req/minute)
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitedErrorResponse'
+  /webhooks/clerk:
+    post:
+      tags: [Webhooks]
+      summary: Clerk user webhook receiver
+      description: |
+        Receives `user.created`, `user.updated`, and `user.deleted` webhook events from Clerk.
+        Signature verification is required.
+      operationId: postClerkWebhook
+      parameters:
+        - in: header
+          name: svix-id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: svix-timestamp
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: svix-signature
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClerkWebhookEvent'
+      responses:
+        '200':
+          description: Webhook accepted, ignored, or duplicate
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/WebhookAckResponse'
+                  - $ref: '#/components/schemas/WebhookDuplicateResponse'
+              examples:
+                processed:
+                  value:
+                    ok: true
+                duplicate:
+                  value:
+                    ok: true
+                    duplicate: true
+        '400':
+          description: Invalid webhook payload/signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidWebhook:
+                  value:
+                    code: INVALID_WEBHOOK
+                    message: Webhook verification failed
+        '401':
+          description: Authentication/user sync validation failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Identity conflict (email linked to another account)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Webhook endpoint rate limit exceeded
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitedErrorResponse'
+        '500':
+          description: Processing failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  securitySchemes:
+    clerkBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk session JWT
+  headers:
+    XRateLimitLimit:
+      description: Max requests in the current sliding window
+      schema:
+        type: integer
+    XRateLimitRemaining:
+      description: Remaining requests in the current sliding window
+      schema:
+        type: integer
+    XRateLimitReset:
+      description: Unix ms timestamp when the window resets
+      schema:
+        type: integer
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        timestamp:
+          type: string
+          format: date-time
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    RateLimitedErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          required: [retryAfter]
+          properties:
+            retryAfter:
+              type: integer
+              description: Seconds until retry
+    AuthenticatedUser:
+      type: object
+      required: [id, clerkUserId, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        clerkUserId:
+          type: string
+        email:
+          type: string
+          format: email
+    AuthMeResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthenticatedUser'
+    UserProfile:
+      type: object
+      required:
+        - id
+        - email
+        - displayName
+        - emailVerified
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        clerkUserId:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        emailVerified:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+    UserProfileResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          $ref: '#/components/schemas/UserProfile'
+    UserProfileUpdateRequest:
+      type: object
+      additionalProperties: false
+      description: At least one field is required.
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 120
+        avatarUrl:
+          nullable: true
+          anyOf:
+            - type: string
+              format: uri
+            - type: string
+              enum: [""]
+    ValidationIssue:
+      type: object
+      required: [path, message]
+      properties:
+        path:
+          type: string
+        message:
+          type: string
+    InvalidPayloadResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          required: [issues]
+          properties:
+            issues:
+              type: array
+              items:
+                $ref: '#/components/schemas/ValidationIssue'
+    WebhookAckResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+    WebhookDuplicateResponse:
+      type: object
+      required: [ok, duplicate]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+        duplicate:
+          type: boolean
+          enum: [true]
+    ClerkWebhookEvent:
+      type: object
+      description: Simplified Clerk webhook event shape used by this service.
+      required: [type, object, data]
+      properties:
+        type:
+          type: string
+          enum:
+            - user.created
+            - user.updated
+            - user.deleted
+            - organization.created
+        object:
+          type: string
+          example: event
+        data:
+          type: object
+          additionalProperties: true
+        event_attributes:
+          type: object
+          additionalProperties: true
+    SubscriptionTier:
+      type: string
+      enum: [free, basic, premium]
+      description: Prisma enum in `subscription_tier`
+    SubscriptionStatus:
+      type: string
+      enum: [active, past_due, canceled, trialing]
+      description: Prisma enum in `subscription_status`
+    HomeType:
+      type: string
+      enum: [single_family, duplex, condo, townhouse, apartment, other]
+      description: Prisma enum in `home_type_enum`
+    UserModel:
+      type: object
+      description: Current Prisma `users` record shape.
+      required:
+        - id
+        - email
+        - displayName
+        - emailVerified
+        - isActive
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        clerkUserId:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        emailVerified:
+          type: boolean
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+    SubscriptionModel:
+      type: object
+      description: Current Prisma `subscriptions` record shape.
+      required:
+        - id
+        - userId
+        - tier
+        - status
+        - cancelAtPeriodEnd
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        tier:
+          $ref: '#/components/schemas/SubscriptionTier'
+        status:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        stripeCustomerId:
+          type: string
+          nullable: true
+        stripeSubscriptionId:
+          type: string
+          nullable: true
+        currentPeriodStart:
+          type: string
+          format: date-time
+          nullable: true
+        currentPeriodEnd:
+          type: string
+          format: date-time
+          nullable: true
+        cancelAtPeriodEnd:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    HomeModel:
+      type: object
+      description: Current Prisma `homes` record shape.
+      required:
+        - id
+        - ownerId
+        - name
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        homeType:
+          allOf:
+            - $ref: '#/components/schemas/HomeType'
+          nullable: true
+        yearBuilt:
+          type: integer
+          nullable: true
+        squareFeet:
+          type: integer
+          nullable: true
+        photoUrl:
+          type: string
+          format: uri
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

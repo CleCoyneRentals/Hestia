@@ -1,5 +1,5 @@
 import { currentUser } from '@clerk/nextjs/server'
-import { UserButton } from '@clerk/nextjs'
+import Link from 'next/link'
 
 export default async function DashboardPage() {
   const user = await currentUser()
@@ -8,7 +8,7 @@ export default async function DashboardPage() {
     <main>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem' }}>
         <h1>Dashboard</h1>
-        <UserButton afterSignOutUrl="/" />
+        <Link href="/profile">Profile</Link>
       </header>
       <section style={{ padding: '1rem' }}>
         <p>Welcome, {user?.firstName ?? 'User'}!</p>

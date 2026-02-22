@@ -11,7 +11,9 @@ import { clerkPlugin } from '@clerk/fastify';
 
 import { env } from './config.js';
 import { requireAuth } from './middleware/auth.js';
+import { rateLimitMiddleware } from './middleware/rateLimit.js';
 import { authRoutes } from './routes/api/auth.js';
+import { userRoutes } from './routes/api/users.js';
 import { clerkWebhookRoutes } from './routes/webhooks/clerk.js';
 import { prisma } from './shared/db.js';
 import './types.js'; // Fastify request type augmentation
@@ -39,8 +41,9 @@ await app.register(cors, {
 
 await app.register(clerkPlugin);
 
-// Note: Rate limiting is handled per-route via Upstash middleware (src/middleware/rateLimit.ts)
-// which supports three tiers (standard/auth/upload) and works across multiple server instances.
+// Rate limiting is two-layered (src/middleware/rateLimit.ts):
+// 1. IP-based onRequest hook at the apiApp level (fires before auth) — coarse DDoS guard
+// 2. Per-route preHandler after auth — user-based fairness limit (10 req/min for auth/profile endpoints)
 
 // ---------- Health check ----------
 
@@ -56,8 +59,10 @@ await app.register(clerkWebhookRoutes, {
 });
 
 await app.register(async apiApp => {
+  apiApp.addHook('onRequest', rateLimitMiddleware); // IP-based, fires before auth
   apiApp.addHook('preHandler', requireAuth);
   await apiApp.register(authRoutes);
+  await apiApp.register(userRoutes);
 }, { prefix: '/api' });
 
 // ---------- Global error handler ----------
