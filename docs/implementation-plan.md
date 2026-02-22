@@ -569,16 +569,16 @@ This eliminates the biggest risk of multi-platform development: API contract dri
 Everything else builds on this. Do not skip or rush any of these steps.
 
 **Backend:**
-- [ ] Initialize Turborepo monorepo with `apps/api` and `apps/web` and `packages/shared`
-- [ ] Set up Fastify with TypeScript, configure hot-reload for development
-- [ ] Set up Prisma with Neon PostgreSQL, create initial schema (users, subscriptions)
-- [ ] Configure environment variable validation (the Zod config.ts pattern)
-- [ ] Set up Upstash Redis client
-- [ ] Set up basic middleware: error handler, request logging, CORS
-- [ ] Set up Docker Compose for local development (Postgres + Redis, for offline work)
-- [ ] Write the `.env.example` file with all required variables documented
-- [ ] Install and configure gitleaks pre-commit hook
-- [ ] Set up Sentry for error tracking
+- [x] Initialize Turborepo monorepo with `apps/api` and `apps/web` and `packages/shared`
+- [x] Set up Fastify with TypeScript, configure hot-reload for development
+- [x] Set up Prisma with Neon PostgreSQL, create initial schema (users, subscriptions)
+- [x] Configure environment variable validation (the Zod config.ts pattern)
+- [x] Set up Upstash Redis client
+- [x] Set up basic middleware: error handler, request logging, CORS
+- [x] Set up Docker Compose for local development (Postgres + Redis, for offline work)
+- [x] Write the `.env.example` file with all required variables documented
+- [x] Install and configure gitleaks pre-commit hook
+- [x] Set up Sentry for error tracking
 
 **iOS:**
 - [ ] Create Xcode project with SwiftUI
@@ -590,7 +590,7 @@ Everything else builds on this. Do not skip or rush any of these steps.
 - [ ] Set up XCTest targets
 
 **CI/CD:**
-- [ ] Backend: GitHub Actions pipeline — lint, test, build on every PR
+- [x] Backend: GitHub Actions pipeline — lint, test, build on every PR
 - [ ] iOS: Xcode Cloud or GitHub Actions with Fastlane — build and test on every PR
 - [ ] Configure Neon branch creation on PRs that include migration files
 
@@ -599,10 +599,10 @@ Everything else builds on this. Do not skip or rush any of these steps.
 ### Phase 1: Authentication & User Management (Weeks 3-4)
 
 **Backend:**
-- [ ] Integrate Clerk SDK (or Auth0) with Fastify
-- [ ] Create auth middleware that verifies JWTs on every request
+- [x] Integrate Clerk SDK (or Auth0) with Fastify
+- [x] Create auth middleware that verifies JWTs on every request
 - [ ] Build user profile endpoints: GET/PATCH /api/users/me
-- [ ] Build user registration webhook handler (Clerk sends a webhook when a user signs up; create the database record)
+- [x] Build user registration webhook handler (Clerk sends a webhook when a user signs up; create the database record)
 - [ ] Implement refresh token rotation if using custom JWT layer on top of Clerk
 - [ ] Set up rate limiting on auth endpoints (10 requests/minute)
 
@@ -615,10 +615,10 @@ Everything else builds on this. Do not skip or rush any of these steps.
 - [ ] Store tokens in Keychain
 
 **Web:**
-- [ ] Integrate Clerk Next.js SDK
-- [ ] Build sign-up and login pages
+- [x] Integrate Clerk Next.js SDK
+- [x] Build sign-up and login pages
 - [ ] Build profile page
-- [ ] Set up protected routes (redirect to login if not authenticated)
+- [x] Set up protected routes (redirect to login if not authenticated)
 
 **Deliverable:** Users can create accounts and log in from iOS and web. Auth tokens are managed securely.
 
