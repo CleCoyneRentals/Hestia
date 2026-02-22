@@ -185,8 +185,8 @@ DATABASE_URL_DIRECT=postgresql://user:password@ep-xxx.us-east-2.aws.neon.tech/db
 REDIS_URL=rediss://default:xxx@xxx.upstash.io:6379
 
 # Auth (Clerk)
-CLERK_SECRET_KEY=sk_test_xxx
-CLERK_PUBLISHABLE_KEY=pk_test_xxx
+CLERK_SECRET_KEY=sk_test_xxxasdfgf
+CLERK_PUBLISHABLE_KEY=pk_test_xxx1235412
 
 # Payments (Stripe)
 STRIPE_SECRET_KEY=sk_test_xxx
