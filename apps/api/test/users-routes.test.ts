@@ -93,7 +93,6 @@ describe('userRoutes', () => {
   });
 
   it('updates displayName and avatarUrl on PATCH /api/users/me', async () => {
-    prismaMock.user.findUnique.mockResolvedValueOnce({ id: 'user_1' });
     prismaMock.user.update.mockResolvedValueOnce({
       ...makeUserResponse(),
       displayName: 'Patricia Coyne',
@@ -127,9 +126,81 @@ describe('userRoutes', () => {
         lastLoginAt: '2026-02-22T00:00:00.000Z',
       },
     });
+    expect(authRateLimitMiddlewareMock).toHaveBeenCalledTimes(1);
   });
 
-  it('returns 400 for invalid PATCH payload', async () => {
+  it('updates only avatarUrl on PATCH /api/users/me (partial update)', async () => {
+    prismaMock.user.update.mockResolvedValueOnce({
+      ...makeUserResponse(),
+      avatarUrl: 'https://example.com/new-avatar.jpg',
+    });
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/users/me',
+      payload: { avatarUrl: 'https://example.com/new-avatar.jpg' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(prismaMock.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'user_1' },
+      data: { avatarUrl: 'https://example.com/new-avatar.jpg' },
+    }));
+  });
+
+  it('returns 400 for PATCH with unknown fields (.strict() enforcement)', async () => {
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/users/me',
+      payload: { displayName: 'Pat', unknownField: 'bad' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: 'INVALID_PAYLOAD',
+      message: 'Invalid profile update payload',
+    });
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for PATCH with whitespace-only displayName', async () => {
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/users/me',
+      payload: { displayName: '   ' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: 'INVALID_PAYLOAD',
+      message: 'Invalid profile update payload',
+    });
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 on PATCH when user is deleted concurrently (P2025)', async () => {
+    const prismaError = Object.assign(
+      new Error('Record to update not found.'),
+      { code: 'P2025', clientVersion: '6.0.0' },
+    );
+    // Make it pass instanceof Prisma.PrismaClientKnownRequestError
+    Object.setPrototypeOf(prismaError, (await import('@prisma/client')).Prisma.PrismaClientKnownRequestError.prototype);
+    prismaMock.user.update.mockRejectedValueOnce(prismaError);
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/users/me',
+      payload: { displayName: 'Pat' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      code: 'USER_NOT_FOUND',
+      message: 'User profile not found',
+    });
+  });
+
+  it('returns 400 for invalid PATCH payload (no fields)', async () => {
     const response = await app.inject({
       method: 'PATCH',
       url: '/api/users/me',

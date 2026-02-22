@@ -375,7 +375,6 @@ components:
       type: object
       required:
         - id
-        - clerkUserId
         - email
         - displayName
         - emailVerified
@@ -387,6 +386,7 @@ components:
           format: uuid
         clerkUserId:
           type: string
+          nullable: true
         email:
           type: string
           format: email

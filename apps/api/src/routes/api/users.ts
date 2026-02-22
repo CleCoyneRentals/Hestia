@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { authRateLimitMiddleware } from '../../middleware/rateLimit.js';
@@ -17,7 +18,11 @@ const userProfileSelect = {
 
 const updateProfileSchema = z.object({
   displayName: z.string().trim().min(1).max(120).optional(),
-  avatarUrl: z.union([z.string().trim().url(), z.literal(''), z.null()]).optional(),
+  avatarUrl: z.union([
+    z.string().trim().url().refine(u => u.startsWith('https://'), { message: 'Only HTTPS URLs are allowed' }),
+    z.literal(''),
+    z.null(),
+  ]).optional(),
 })
   .strict()
   .superRefine((value, ctx) => {
@@ -28,10 +33,6 @@ const updateProfileSchema = z.object({
       });
     }
   });
-
-function getAuthUserId(req: { user?: { id: string } }): string | null {
-  return req.user?.id ?? null;
-}
 
 function normalizeDisplayName(displayName: string): string {
   return displayName.trim().replace(/\s+/g, ' ');
@@ -48,16 +49,8 @@ export const userRoutes: FastifyPluginAsync = async app => {
   app.get('/users/me', {
     preHandler: authRateLimitMiddleware,
   }, async (req, reply) => {
-    const userId = getAuthUserId(req);
-    if (!userId) {
-      return reply.code(401).send({
-        code: 'UNAUTHORIZED',
-        message: 'Authentication required',
-      });
-    }
-
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: req.user!.id },
       select: userProfileSelect,
     });
 
@@ -74,32 +67,12 @@ export const userRoutes: FastifyPluginAsync = async app => {
   app.patch('/users/me', {
     preHandler: authRateLimitMiddleware,
   }, async (req, reply) => {
-    const userId = getAuthUserId(req);
-    if (!userId) {
-      return reply.code(401).send({
-        code: 'UNAUTHORIZED',
-        message: 'Authentication required',
-      });
-    }
-
     const parsed = updateProfileSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({
         code: 'INVALID_PAYLOAD',
         message: 'Invalid profile update payload',
         issues: toValidationIssues(parsed.error),
-      });
-    }
-
-    const existing = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true },
-    });
-
-    if (!existing) {
-      return reply.code(404).send({
-        code: 'USER_NOT_FOUND',
-        message: 'User profile not found',
       });
     }
 
@@ -111,12 +84,21 @@ export const userRoutes: FastifyPluginAsync = async app => {
       updateData.avatarUrl = parsed.data.avatarUrl === '' ? null : parsed.data.avatarUrl;
     }
 
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: updateData,
-      select: userProfileSelect,
-    });
-
-    return reply.send({ user: updatedUser });
+    try {
+      const updatedUser = await prisma.user.update({
+        where: { id: req.user!.id },
+        data: updateData,
+        select: userProfileSelect,
+      });
+      return reply.send({ user: updatedUser });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+        return reply.code(404).send({
+          code: 'USER_NOT_FOUND',
+          message: 'User profile not found',
+        });
+      }
+      throw err;
+    }
   });
 };
