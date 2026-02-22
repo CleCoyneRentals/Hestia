@@ -12,6 +12,7 @@ import { clerkPlugin } from '@clerk/fastify';
 import { env } from './config.js';
 import { requireAuth } from './middleware/auth.js';
 import { authRoutes } from './routes/api/auth.js';
+import { userRoutes } from './routes/api/users.js';
 import { clerkWebhookRoutes } from './routes/webhooks/clerk.js';
 import { prisma } from './shared/db.js';
 import './types.js'; // Fastify request type augmentation
@@ -58,6 +59,7 @@ await app.register(clerkWebhookRoutes, {
 await app.register(async apiApp => {
   apiApp.addHook('preHandler', requireAuth);
   await apiApp.register(authRoutes);
+  await apiApp.register(userRoutes);
 }, { prefix: '/api' });
 
 // ---------- Global error handler ----------

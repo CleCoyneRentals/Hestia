@@ -592,7 +592,7 @@ Everything else builds on this. Do not skip or rush any of these steps.
 **CI/CD:**
 - [x] Backend: GitHub Actions pipeline — lint, test, build on every PR
 - [ ] iOS: Xcode Cloud or GitHub Actions with Fastlane — build and test on every PR
-- [ ] Configure Neon branch creation on PRs that include migration files
+- [x] Configure Neon branch creation on PRs that include migration files
 
 **Deliverable:** Empty app shells that can communicate with a running API server. All environments configured. Security foundations in place.
 
@@ -601,10 +601,10 @@ Everything else builds on this. Do not skip or rush any of these steps.
 **Backend:**
 - [x] Integrate Clerk SDK (or Auth0) with Fastify
 - [x] Create auth middleware that verifies JWTs on every request
-- [ ] Build user profile endpoints: GET/PATCH /api/users/me
+- [x] Build user profile endpoints: GET/PATCH /api/users/me
 - [x] Build user registration webhook handler (Clerk sends a webhook when a user signs up; create the database record)
 - [ ] Implement refresh token rotation if using custom JWT layer on top of Clerk
-- [ ] Set up rate limiting on auth endpoints (10 requests/minute)
+- [x] Set up rate limiting on auth endpoints (10 requests/minute)
 
 **iOS:**
 - [ ] Integrate Clerk iOS SDK (or Auth0.swift)
@@ -617,7 +617,7 @@ Everything else builds on this. Do not skip or rush any of these steps.
 **Web:**
 - [x] Integrate Clerk Next.js SDK
 - [x] Build sign-up and login pages
-- [ ] Build profile page
+- [x] Build profile page
 - [x] Set up protected routes (redirect to login if not authenticated)
 
 **Deliverable:** Users can create accounts and log in from iOS and web. Auth tokens are managed securely.

@@ -1,0 +1,97 @@
+name: Neon Migration Preview Branch
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - closed
+    paths:
+      - "apps/api/prisma/migrations/**"
+  workflow_dispatch:
+
+concurrency:
+  group: neon-migration-preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  create_neon_branch:
+    name: Create Neon Branch
+    if: ${{ github.event.action != 'closed' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Validate Neon configuration
+        run: |
+          if [ -z "${{ vars.NEON_PROJECT_ID }}" ]; then
+            echo "Missing repository variable: NEON_PROJECT_ID"
+            exit 1
+          fi
+          if [ -z "${{ secrets.NEON_API_KEY }}" ]; then
+            echo "Missing repository secret: NEON_API_KEY"
+            exit 1
+          fi
+
+      - name: Derive branch name
+        id: naming
+        run: |
+          echo "branch_name=preview/pr-${{ github.event.pull_request.number || github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Get branch expiration date (2 weeks)
+        run: echo "EXPIRES_AT=$(date -u --date '+14 days' +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+
+      - name: Create Neon Branch
+        id: create_neon_branch
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch_name: ${{ steps.naming.outputs.branch_name }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          expires_at: ${{ env.EXPIRES_AT }}
+
+      - name: Write creation summary
+        run: |
+          echo "### Neon preview branch created for migration PR" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch: \`${{ steps.naming.outputs.branch_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Expires at: \`${{ env.EXPIRES_AT }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Created now: \`${{ steps.create_neon_branch.outputs.created }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch ID: \`${{ steps.create_neon_branch.outputs.branch_id }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  delete_neon_branch:
+    name: Delete Neon Branch
+    if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.fork == false }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Validate Neon configuration
+        run: |
+          if [ -z "${{ vars.NEON_PROJECT_ID }}" ]; then
+            echo "Missing repository variable: NEON_PROJECT_ID"
+            exit 1
+          fi
+          if [ -z "${{ secrets.NEON_API_KEY }}" ]; then
+            echo "Missing repository secret: NEON_API_KEY"
+            exit 1
+          fi
+
+      - name: Derive branch name
+        id: naming
+        run: |
+          echo "branch_name=preview/pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Delete Neon Branch
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch: ${{ steps.naming.outputs.branch_name }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      - name: Write cleanup summary
+        run: |
+          echo "### Neon preview branch cleanup" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch: \`${{ steps.naming.outputs.branch_name }}\`" >> "$GITHUB_STEP_SUMMARY"
